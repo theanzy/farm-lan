@@ -2,11 +2,16 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
+	"path"
+	"regexp"
+	"slices"
 	"sort"
+	"strconv"
+	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -182,46 +187,154 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 	return tm
 }
 
-type Player struct {
-	Pos           rl.Vector2
-	HitAreaOffset rl.Rectangle
-	Asset         rl.Texture2D
-	AssetSize     rl.Vector2
-	TileSize      int
-	Size          rl.Vector2
+type AnimStyle = struct {
+	Variants   map[string]rl.Texture2D
+	Base       rl.Texture2D
+	StripCount int
 }
+type AnimStyles = map[string]AnimStyle
 
-func NewPlayer(pos rl.Vector2, tilesize int, scale int) Player {
-	playerImg := rl.LoadTexture("./resources/characters/Human/IDLE/base_idle_strip9.png")
-	assetSize := rl.NewVector2(float32(playerImg.Width)/9, float32(playerImg.Height))
-	size := rl.NewVector2(float32(assetSize.X)*float32(scale), float32(assetSize.Y)*float32(scale))
+func NewAnimStyles(dir string) AnimStyles {
+	styles := AnimStyles{}
 
-	hitboxSize := float32(tilesize) * 0.5 * float32(scale)
-	hitRect := rl.NewRectangle(size.X/2-hitboxSize/2, size.Y/2-hitboxSize/2, hitboxSize, hitboxSize)
-	return Player{
-		Pos:           pos,
-		HitAreaOffset: hitRect,
-		Asset:         playerImg,
-		AssetSize:     assetSize,
-		TileSize:      tilesize,
-		Size:          size,
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	r := regexp.MustCompile(`[a-z](\d+)\.png`)
+	supportedStyles := []string{"IDLE", "WALKING"}
+
+	for _, e := range entries {
+		if !slices.Contains(supportedStyles, e.Name()) {
+			continue
+		}
+		var style = AnimStyle{
+			Variants:   map[string]rl.Texture2D{},
+			StripCount: 0,
+		}
+		fullpath := path.Join(dir, e.Name())
+		files, err := os.ReadDir(fullpath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, f := range files {
+			variantName := strings.Split(f.Name(), "_")[0]
+			s := r.FindStringSubmatch(f.Name())[1]
+			strip, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
+			style.StripCount = int(strip)
+
+			imgPath := path.Join(fullpath, f.Name())
+			if variantName == "base" {
+				style.Base = rl.LoadTexture(imgPath)
+			} else {
+				style.Variants[variantName] = rl.LoadTexture(imgPath)
+			}
+		}
+		styles[e.Name()] = style
+	}
+	return styles
+}
+func UnloadAnimStyles(s AnimStyles) {
+	for _, style := range s {
+		rl.UnloadTexture(style.Base)
+		for _, variant := range style.Variants {
+			rl.UnloadTexture(variant)
+		}
 	}
 }
 
-func (p *Player) Unload() {
-	rl.UnloadTexture(p.Asset)
+type Animation struct {
+	AssetSize  rl.Vector2
+	Image      rl.Texture2D
+	X          float32
+	Speed      float32
+	StripCount float32
+}
+
+func (a *Animation) Update(dt float32) {
+	a.X += dt * a.Speed
+	if a.X >= a.StripCount {
+		a.X = 0
+	}
+}
+
+func (a Animation) SrcRect() rl.Rectangle {
+	x := float32(math.Floor(float64(a.X)))
+	return rl.NewRectangle(x*a.AssetSize.X, 0, a.AssetSize.X, a.AssetSize.Y)
+}
+
+type Player struct {
+	Pos            rl.Vector2
+	HitAreaOffset  rl.Rectangle
+	AssetSize      rl.Vector2
+	TileSize       int
+	Size           rl.Vector2
+	AnimStyles     AnimStyles
+	AnimState      string
+	BaseAnimations map[string]Animation
+}
+
+func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles) Player {
+	playerImg := animStyles["IDLE"].Base
+	stripCount := animStyles["IDLE"].StripCount
+
+	assetSize := rl.NewVector2(float32(playerImg.Width)/float32(stripCount), float32(playerImg.Height))
+	size := rl.NewVector2(float32(assetSize.X)*float32(scale), float32(assetSize.Y)*float32(scale))
+
+	hitboxSize := assetSize.X * 0.4
+
+	hitRect := rl.NewRectangle(size.X/2-hitboxSize/2, size.Y/2-hitboxSize/2, hitboxSize, hitboxSize)
+
+	baseAnimations := map[string]Animation{}
+	for anim, animStyle := range animStyles {
+		baseAnimations[anim] = Animation{Image: animStyle.Base, AssetSize: assetSize, X: 0, Speed: 20, StripCount: float32(animStyle.StripCount)}
+	}
+
+	return Player{
+		Pos:            pos,
+		HitAreaOffset:  hitRect,
+		AssetSize:      assetSize,
+		Size:           size,
+		TileSize:       tilesize,
+		AnimStyles:     animStyles,
+		AnimState:      "IDLE",
+		BaseAnimations: baseAnimations,
+	}
 }
 
 func (p *Player) Update(dt float32, movement rl.Vector2) {
-	p.Pos.X += movement.X * dt * 100
-	p.Pos.Y += movement.Y * dt * 100
+	frameMovement := rl.Vector2Normalize(movement)
+	p.Pos.X += frameMovement.X * dt * 150
+	p.Pos.Y += frameMovement.Y * dt * 150
+
+	if movement.Y > 0 {
+		p.AnimState = "WALKING"
+	} else if movement.Y < 0 {
+		p.AnimState = "WALKING"
+	} else if movement.X > 0 {
+		// TODO flip
+		p.AnimState = "WALKING"
+	} else if movement.X < 0 {
+		// TODO flip
+		p.AnimState = "WALKING"
+	} else {
+		p.AnimState = "IDLE"
+	}
+
+	baseAnim := p.BaseAnimations[p.AnimState]
+	baseAnim.Update(dt)
+	p.BaseAnimations[p.AnimState] = baseAnim
 }
 
 func (p Player) Draw(offset rl.Vector2) {
 	rl.DrawRectangleRec(p.Hitbox(offset), rl.Red)
-	srcRect := rl.NewRectangle(0, 0, p.AssetSize.X, p.AssetSize.Y)
 	destRect := rl.NewRectangle(p.Pos.X-offset.X, p.Pos.Y-offset.Y, p.Size.X, p.Size.Y)
-	rl.DrawTexturePro(p.Asset, srcRect, destRect, rl.NewVector2(0, 0), 0, rl.White)
+	baseAnim := p.BaseAnimations[p.AnimState]
+	rl.DrawTexturePro(baseAnim.Image, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
 }
 
 func (p Player) Hitbox(offset rl.Vector2) rl.Rectangle {
@@ -237,19 +350,22 @@ func main() {
 	originalTilesize := 16
 
 	tmd, _ := parseMap("./resources/map/0.tmj")
-	tm := loadTilemap(&tmd, 32)
+	tm := loadTilemap(&tmd, 48)
 	defer tm.Unload()
+
+	humanAnimStyles := NewAnimStyles("./resources/characters/Human")
+	defer UnloadAnimStyles(humanAnimStyles)
 
 	playerTile := tm.ExtractObjectOne("player")
 	if playerTile == nil {
 		return
 	}
 	startingPlayerPos := rl.NewVector2(playerTile.Pos.X*float32(tm.Tilesize), playerTile.Pos.Y*float32(tm.Tilesize))
-	fmt.Printf("%v, %v\n", playerTile.Pos, startingPlayerPos)
 	player := NewPlayer(
 		startingPlayerPos,
 		tm.Tilesize,
 		tm.Tilesize/originalTilesize,
+		humanAnimStyles,
 	)
 
 	var camScroll = rl.NewVector2(0, 0)
