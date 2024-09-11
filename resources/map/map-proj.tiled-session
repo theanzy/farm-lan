@@ -1,0 +1,44 @@
+{
+    "Map/SizeTest": {
+        "height": 4300,
+        "width": 2
+    },
+    "activeFile": "0.tmj",
+    "expandedProjectPaths": [
+        "."
+    ],
+    "fileStates": {
+        "0.tmj": {
+            "scale": 1.5,
+            "selectedLayer": 10,
+            "viewCenter": {
+                "x": 621.6666666666666,
+                "y": 277
+            }
+        },
+        "tilesets.tsx": {
+            "scaleInDock": 2,
+            "scaleInEditor": 1
+        }
+    },
+    "last.imagePath": "C:/workspace/go/game/farm-sim/resources/map",
+    "map.height": 50,
+    "map.lastUsedFormat": "json",
+    "map.tileHeight": 16,
+    "map.tileWidth": 16,
+    "map.width": 80,
+    "openFiles": [
+        "0.tmj"
+    ],
+    "project": "map-proj.tiled-project",
+    "property.type": "int",
+    "recentFiles": [
+        "0.tmj",
+        "tilesets.tsx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 16,
+        "width": 16
+    }
+}
