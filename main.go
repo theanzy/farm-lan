@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -102,6 +103,23 @@ func (tm *Tilemap) Draw(offset rl.Vector2, screenSize rl.Vector2) {
 
 	}
 }
+
+func (tm *Tilemap) ExtractObjectOne(obj string) *Tile {
+	var idx = -1
+	for i, o := range tm.Objects {
+		if o.Type == obj {
+			idx = i
+			break
+		}
+	}
+	if idx >= 0 {
+		res := tm.Objects[idx]
+		tm.Objects = append(tm.Objects[:idx], tm.Objects[idx+1:]...)
+		return &res
+	}
+	return nil
+}
+
 func computeCellRange(start float64, end float64, tilesize float64) (int, int) {
 	var sc = math.Floor(start / tilesize)
 	var startC = int(sc)
@@ -151,7 +169,6 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 			}
 			if z == -1 {
 				tm.Objects = append(tm.Objects, Tile{Pos: cellpos, Variant: int(id - 1), Type: layer.Name})
-
 			} else {
 				tiles[cellpos] = Tile{Type: layer.Name, Variant: int(id - 1), Pos: cellpos}
 			}
@@ -165,35 +182,118 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 	return tm
 }
 
+type Player struct {
+	Pos           rl.Vector2
+	HitAreaOffset rl.Rectangle
+	Asset         rl.Texture2D
+	AssetSize     rl.Vector2
+	TileSize      int
+	Size          rl.Vector2
+}
+
+func NewPlayer(pos rl.Vector2, tilesize int, scale int) Player {
+	playerImg := rl.LoadTexture("./resources/characters/Human/IDLE/base_idle_strip9.png")
+	assetSize := rl.NewVector2(float32(playerImg.Width)/9, float32(playerImg.Height))
+	size := rl.NewVector2(float32(assetSize.X)*float32(scale), float32(assetSize.Y)*float32(scale))
+
+	hitboxSize := float32(tilesize) * 0.5 * float32(scale)
+	hitRect := rl.NewRectangle(size.X/2-hitboxSize/2, size.Y/2-hitboxSize/2, hitboxSize, hitboxSize)
+	return Player{
+		Pos:           pos,
+		HitAreaOffset: hitRect,
+		Asset:         playerImg,
+		AssetSize:     assetSize,
+		TileSize:      tilesize,
+		Size:          size,
+	}
+}
+
+func (p *Player) Unload() {
+	rl.UnloadTexture(p.Asset)
+}
+
+func (p *Player) Update(dt float32, movement rl.Vector2) {
+	p.Pos.X += movement.X * dt * 100
+	p.Pos.Y += movement.Y * dt * 100
+}
+
+func (p Player) Draw(offset rl.Vector2) {
+	rl.DrawRectangleRec(p.Hitbox(offset), rl.Red)
+	srcRect := rl.NewRectangle(0, 0, p.AssetSize.X, p.AssetSize.Y)
+	destRect := rl.NewRectangle(p.Pos.X-offset.X, p.Pos.Y-offset.Y, p.Size.X, p.Size.Y)
+	rl.DrawTexturePro(p.Asset, srcRect, destRect, rl.NewVector2(0, 0), 0, rl.White)
+}
+
+func (p Player) Hitbox(offset rl.Vector2) rl.Rectangle {
+	return rl.NewRectangle(p.Pos.X+p.HitAreaOffset.X-offset.X, p.Pos.Y+p.HitAreaOffset.Y-offset.Y, p.HitAreaOffset.Width, p.HitAreaOffset.Height)
+}
+
 func main() {
 	const WIDTH = 1280
 	const HEIGHT = 720
 	rl.InitWindow(WIDTH, HEIGHT, "Farm sim")
 	defer rl.CloseWindow()
 	rl.SetTargetFPS(60)
+	originalTilesize := 16
 
 	tmd, _ := parseMap("./resources/map/0.tmj")
 	tm := loadTilemap(&tmd, 32)
 	defer tm.Unload()
 
-	var camoffset = rl.NewVector2(0, 0)
+	playerTile := tm.ExtractObjectOne("player")
+	if playerTile == nil {
+		return
+	}
+	startingPlayerPos := rl.NewVector2(playerTile.Pos.X*float32(tm.Tilesize), playerTile.Pos.Y*float32(tm.Tilesize))
+	fmt.Printf("%v, %v\n", playerTile.Pos, startingPlayerPos)
+	player := NewPlayer(
+		startingPlayerPos,
+		tm.Tilesize,
+		tm.Tilesize/originalTilesize,
+	)
+
+	var camScroll = rl.NewVector2(0, 0)
 	for !rl.WindowShouldClose() {
-		if rl.IsKeyPressed(rl.KeyUp) {
-			camoffset.Y -= 100
+		playerMoveX := []float32{0, 0}
+		playerMoveY := []float32{0, 0}
+		dt := rl.GetFrameTime()
+		if rl.IsKeyDown(rl.KeyUp) {
+			playerMoveY[0] = 1
 		}
-		if rl.IsKeyPressed(rl.KeyDown) {
-			camoffset.Y += 100
+		if rl.IsKeyDown(rl.KeyDown) {
+			playerMoveY[1] = 1
 		}
-		if rl.IsKeyPressed(rl.KeyLeft) {
-			camoffset.X -= 100
+		if rl.IsKeyDown(rl.KeyLeft) {
+			playerMoveX[0] = 1
 		}
-		if rl.IsKeyPressed(rl.KeyRight) {
-			camoffset.X += 100
+		if rl.IsKeyDown(rl.KeyRight) {
+			playerMoveX[1] = 1
 		}
+
+		if rl.IsKeyUp(rl.KeyUp) {
+			playerMoveY[0] = 0
+		}
+		if rl.IsKeyUp(rl.KeyDown) {
+			playerMoveY[1] = 0
+		}
+		if rl.IsKeyUp(rl.KeyLeft) {
+			playerMoveX[0] = 0
+		}
+		if rl.IsKeyUp(rl.KeyRight) {
+			playerMoveX[1] = 0
+		}
+
+		camScrollDest := rl.NewVector2(player.Pos.X-WIDTH/2, player.Pos.Y-HEIGHT/2)
+		dCamScroll := rl.NewVector2((camScrollDest.X-camScroll.X)*2, (camScrollDest.Y-camScroll.Y)*2)
+
+		camScroll.X += dCamScroll.X * dt
+		camScroll.Y += dCamScroll.Y * dt
+		player.Update(dt, rl.NewVector2(playerMoveX[1]-playerMoveX[0], playerMoveY[1]-playerMoveY[0]))
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)
-		tm.Draw(camoffset, rl.NewVector2(WIDTH, HEIGHT))
+		tm.Draw(camScroll, rl.NewVector2(WIDTH, HEIGHT))
+		player.Draw(camScroll)
 		rl.EndDrawing()
 	}
 }
