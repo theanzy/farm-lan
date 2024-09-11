@@ -105,8 +105,11 @@ func (tm *Tilemap) Draw(offset rl.Vector2, screenSize rl.Vector2) {
 				rl.DrawTextureRec(tm.tilesetAsset, srcRect, viewpos, rl.White)
 			}
 		}
-
 	}
+	// Draw obstacles
+	// for obstaclePos := range tm.Obstacles {
+	// 	rl.DrawRectangle(int32(obstaclePos.X*float32(tm.Tilesize)-offset.X), int32(obstaclePos.Y*float32(tm.Tilesize)-offset.Y), int32(tm.Tilesize), int32(tm.Tilesize), rl.White)
+	// }
 }
 
 func (tm *Tilemap) ExtractObjectOne(obj string) *Tile {
@@ -123,6 +126,30 @@ func (tm *Tilemap) ExtractObjectOne(obj string) *Tile {
 		return &res
 	}
 	return nil
+}
+
+var NEIGHBOR_OFFSET = []rl.Vector2{
+	rl.NewVector2(-1, -1),
+	rl.NewVector2(0, -1),
+	rl.NewVector2(1, -1),
+	rl.NewVector2(-1, 0),
+	rl.NewVector2(1, 0),
+	rl.NewVector2(-1, 1),
+	rl.NewVector2(0, 1),
+	rl.NewVector2(1, 1),
+}
+
+func (tm *Tilemap) GetObstaclesAround(pos rl.Vector2) []rl.Rectangle {
+	var res = []rl.Rectangle{}
+	cellPos := rl.NewVector2(float32(math.Floor(float64(pos.X)/float64(tm.Tilesize))), float32(math.Floor(float64(pos.Y)/float64(tm.Tilesize))))
+	for _, offset := range NEIGHBOR_OFFSET {
+		neighborPos := rl.NewVector2(cellPos.X+offset.X, cellPos.Y+offset.Y)
+		if ok := tm.Obstacles[neighborPos]; ok {
+			res = append(res, rl.NewRectangle(neighborPos.X*float32(tm.Tilesize), neighborPos.Y*float32(tm.Tilesize), float32(tm.Tilesize), float32(tm.Tilesize)))
+		}
+	}
+
+	return res
 }
 
 func computeCellRange(start float64, end float64, tilesize float64) (int, int) {
@@ -143,7 +170,7 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 	var img = rl.LoadImage("./resources/map/tilesets.png")
 	defer rl.UnloadImage(img)
 	scale := tilesize / tmd.TileWidth
-	rl.ImageResize(img, img.Width*int32(scale), img.Height*int32(scale))
+	rl.ImageResizeNN(img, img.Width*int32(scale), img.Height*int32(scale))
 
 	var tm Tilemap
 	tm.tilesetCols = 64
@@ -165,13 +192,14 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 			x := i % width
 			y := i / width
 			cellpos := rl.NewVector2(float32(x), float32(y))
-			if layer.Name == "obstacles" {
+			if layer.Name == "obstacles" && id > 0 {
 				tm.Obstacles[cellpos] = true
 				continue
 			}
 			if id == 0 {
 				continue
 			}
+
 			if z == -1 {
 				tm.Objects = append(tm.Objects, Tile{Pos: cellpos, Variant: int(id - 1), Type: layer.Name})
 			} else {
@@ -345,23 +373,50 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 	}
 }
 
-func (p *Player) Update(dt float32, movement rl.Vector2) {
+func (p *Player) Center() rl.Vector2 {
+	return rl.NewVector2(p.Pos.X+p.Size.X*0.5, p.Pos.Y+p.Size.Y*0.5)
+}
+
+func (p *Player) Update(dt float32, movement rl.Vector2, getObstacles func(pos rl.Vector2) []rl.Rectangle) {
 	frameMovement := rl.Vector2Normalize(movement)
 	p.Pos.X += frameMovement.X * dt * 150
-	p.Pos.Y += frameMovement.Y * dt * 150
+	for _, obstacle := range getObstacles(p.Center()) {
+		hitbox := p.Hitbox(rl.NewVector2(0, 0))
+		if rl.CheckCollisionRecs(hitbox, obstacle) {
+			if frameMovement.X > 0 {
+				p.Pos.X = obstacle.X - hitbox.Width - p.HitAreaOffset.X
+			} else if frameMovement.X < 0 {
+				p.Pos.X = obstacle.X + obstacle.Width - p.HitAreaOffset.X
+			}
+		}
+	}
 
+	p.Pos.Y += frameMovement.Y * dt * 150
+	for _, obstacle := range getObstacles(p.Center()) {
+		hitbox := p.Hitbox(rl.NewVector2(0, 0))
+		if rl.CheckCollisionRecs(hitbox, obstacle) {
+			if frameMovement.Y > 0 {
+				p.Pos.Y = obstacle.Y - hitbox.Height - p.HitAreaOffset.Y
+			} else if frameMovement.Y < 0 {
+				p.Pos.Y = obstacle.Y + obstacle.Height - p.HitAreaOffset.Y
+			}
+		}
+	}
+
+	p.AnimState = "IDLE"
 	if movement.Y > 0 {
 		p.AnimState = "WALKING"
-	} else if movement.Y < 0 {
+	}
+	if movement.Y < 0 {
 		p.AnimState = "WALKING"
-	} else if movement.X > 0 {
+	}
+	if movement.X > 0 {
 		p.AnimState = "WALKING"
 		p.Flipped = false
-	} else if movement.X < 0 {
+	}
+	if movement.X < 0 {
 		p.AnimState = "WALKING"
 		p.Flipped = true
-	} else {
-		p.AnimState = "IDLE"
 	}
 
 	baseAnim := p.BaseAnimations[p.AnimState]
@@ -380,7 +435,7 @@ func (p Player) Draw(offset rl.Vector2) {
 	rl.DrawTexturePro(img, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
 }
 
-func (p Player) Hitbox(offset rl.Vector2) rl.Rectangle {
+func (p *Player) Hitbox(offset rl.Vector2) rl.Rectangle {
 	return rl.NewRectangle(p.Pos.X+p.HitAreaOffset.X-offset.X, p.Pos.Y+p.HitAreaOffset.Y-offset.Y, p.HitAreaOffset.Width, p.HitAreaOffset.Height)
 }
 
@@ -450,7 +505,7 @@ func main() {
 
 		camScroll.X += dCamScroll.X * dt
 		camScroll.Y += dCamScroll.Y * dt
-		player.Update(dt, rl.NewVector2(playerMoveX[1]-playerMoveX[0], playerMoveY[1]-playerMoveY[0]))
+		player.Update(dt, rl.NewVector2(playerMoveX[1]-playerMoveX[0], playerMoveY[1]-playerMoveY[0]), tm.GetObstaclesAround)
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)

@@ -1155,7 +1155,7 @@
          "name":"obstacles",
          "opacity":0.53,
          "type":"tilelayer",
-         "visible":false,
+         "visible":true,
          "width":80,
          "x":0,
          "y":0
