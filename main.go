@@ -238,6 +238,33 @@ func NewAnimStyles(dir string) AnimStyles {
 	}
 	return styles
 }
+
+func FlipTextureHorizontal(tex rl.Texture2D) rl.Texture2D {
+	baseImg := rl.LoadImageFromTexture(tex)
+	defer rl.UnloadImage(baseImg)
+	rl.ImageFlipHorizontal(baseImg)
+	return rl.LoadTextureFromImage(baseImg)
+}
+
+func FlipAnimStyles(animStyles AnimStyles) AnimStyles {
+	var res = AnimStyles{}
+	for name, style := range animStyles {
+		baseImg := rl.LoadImageFromTexture(style.Base)
+		defer rl.UnloadImage(baseImg)
+		rl.ImageFlipHorizontal(baseImg)
+		variants := map[string]rl.Texture2D{}
+		for variant, img := range style.Variants {
+			variants[variant] = FlipTextureHorizontal(img)
+		}
+		res[name] = AnimStyle{
+			Base:       FlipTextureHorizontal(style.Base),
+			StripCount: style.StripCount,
+			Variants:   variants,
+		}
+	}
+	return res
+}
+
 func UnloadAnimStyles(s AnimStyles) {
 	for _, style := range s {
 		rl.UnloadTexture(style.Base)
@@ -248,11 +275,12 @@ func UnloadAnimStyles(s AnimStyles) {
 }
 
 type Animation struct {
-	AssetSize  rl.Vector2
-	Image      rl.Texture2D
-	X          float32
-	Speed      float32
-	StripCount float32
+	AssetSize    rl.Vector2
+	Image        rl.Texture2D
+	ImageFlipped rl.Texture2D
+	X            float32
+	Speed        float32
+	StripCount   float32
 }
 
 func (a *Animation) Update(dt float32) {
@@ -268,17 +296,19 @@ func (a Animation) SrcRect() rl.Rectangle {
 }
 
 type Player struct {
-	Pos            rl.Vector2
-	HitAreaOffset  rl.Rectangle
-	AssetSize      rl.Vector2
-	TileSize       int
-	Size           rl.Vector2
-	AnimStyles     AnimStyles
-	AnimState      string
-	BaseAnimations map[string]Animation
+	Pos               rl.Vector2
+	HitAreaOffset     rl.Rectangle
+	AssetSize         rl.Vector2
+	TileSize          int
+	Size              rl.Vector2
+	AnimStyles        AnimStyles
+	AnimStylesFlipped AnimStyles
+	AnimState         string
+	BaseAnimations    map[string]Animation
+	Flipped           bool
 }
 
-func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles) Player {
+func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, animStylesFlipped AnimStyles) Player {
 	playerImg := animStyles["IDLE"].Base
 	stripCount := animStyles["IDLE"].StripCount
 
@@ -291,18 +321,27 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles) P
 
 	baseAnimations := map[string]Animation{}
 	for anim, animStyle := range animStyles {
-		baseAnimations[anim] = Animation{Image: animStyle.Base, AssetSize: assetSize, X: 0, Speed: 20, StripCount: float32(animStyle.StripCount)}
+		baseAnimations[anim] = Animation{
+			Image:        animStyle.Base,
+			AssetSize:    assetSize,
+			X:            0,
+			Speed:        20,
+			StripCount:   float32(animStyle.StripCount),
+			ImageFlipped: animStylesFlipped[anim].Base,
+		}
 	}
 
 	return Player{
-		Pos:            pos,
-		HitAreaOffset:  hitRect,
-		AssetSize:      assetSize,
-		Size:           size,
-		TileSize:       tilesize,
-		AnimStyles:     animStyles,
-		AnimState:      "IDLE",
-		BaseAnimations: baseAnimations,
+		Pos:               pos,
+		HitAreaOffset:     hitRect,
+		AssetSize:         assetSize,
+		Size:              size,
+		TileSize:          tilesize,
+		AnimStyles:        animStyles,
+		AnimStylesFlipped: animStylesFlipped,
+		AnimState:         "IDLE",
+		BaseAnimations:    baseAnimations,
+		Flipped:           false,
 	}
 }
 
@@ -316,11 +355,11 @@ func (p *Player) Update(dt float32, movement rl.Vector2) {
 	} else if movement.Y < 0 {
 		p.AnimState = "WALKING"
 	} else if movement.X > 0 {
-		// TODO flip
 		p.AnimState = "WALKING"
+		p.Flipped = false
 	} else if movement.X < 0 {
-		// TODO flip
 		p.AnimState = "WALKING"
+		p.Flipped = true
 	} else {
 		p.AnimState = "IDLE"
 	}
@@ -334,7 +373,11 @@ func (p Player) Draw(offset rl.Vector2) {
 	rl.DrawRectangleRec(p.Hitbox(offset), rl.Red)
 	destRect := rl.NewRectangle(p.Pos.X-offset.X, p.Pos.Y-offset.Y, p.Size.X, p.Size.Y)
 	baseAnim := p.BaseAnimations[p.AnimState]
-	rl.DrawTexturePro(baseAnim.Image, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+	img := baseAnim.Image
+	if p.Flipped {
+		img = baseAnim.ImageFlipped
+	}
+	rl.DrawTexturePro(img, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
 }
 
 func (p Player) Hitbox(offset rl.Vector2) rl.Rectangle {
@@ -355,6 +398,8 @@ func main() {
 
 	humanAnimStyles := NewAnimStyles("./resources/characters/Human")
 	defer UnloadAnimStyles(humanAnimStyles)
+	humanAnimStylesFlipped := FlipAnimStyles(humanAnimStyles)
+	defer UnloadAnimStyles(humanAnimStylesFlipped)
 
 	playerTile := tm.ExtractObjectOne("player")
 	if playerTile == nil {
@@ -366,6 +411,7 @@ func main() {
 		tm.Tilesize,
 		tm.Tilesize/originalTilesize,
 		humanAnimStyles,
+		humanAnimStylesFlipped,
 	)
 
 	var camScroll = rl.NewVector2(0, 0)
