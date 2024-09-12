@@ -71,6 +71,10 @@ type Tile struct {
 	Pos     rl.Vector2
 }
 
+func (t Tile) Center(tilesize float32) rl.Vector2 {
+	return rl.NewVector2(t.Pos.X+tilesize, t.Pos.Y)
+}
+
 type Tilemap struct {
 	TileLayers   []map[rl.Vector2]Tile
 	Objects      []Tile
@@ -78,13 +82,14 @@ type Tilemap struct {
 	tilesetAsset rl.Texture2D
 	Tilesize     int
 	tilesetCols  int
+	Roofs        []Tile
 }
 
 func (tm Tilemap) Unload() {
 	rl.UnloadTexture(tm.tilesetAsset)
 }
 
-func (tm *Tilemap) Draw(offset rl.Vector2, screenSize rl.Vector2) {
+func (tm *Tilemap) DrawTerrain(offset rl.Vector2, screenSize rl.Vector2) {
 	cstartX, cendX := computeCellRange(float64(offset.X), float64(offset.X+screenSize.X), float64(tm.Tilesize))
 	cstartY, cendY := computeCellRange(float64(offset.Y), float64(offset.Y+screenSize.Y), float64(tm.Tilesize))
 	for _, layers := range tm.TileLayers {
@@ -95,21 +100,35 @@ func (tm *Tilemap) Draw(offset rl.Vector2, screenSize rl.Vector2) {
 				if !ok {
 					continue
 				}
-				viewpos := rl.Vector2Subtract(rl.NewVector2(pos.X*float32(tm.Tilesize), pos.Y*float32(tm.Tilesize)), offset)
-				variant := tile.Variant
-				cols := tm.tilesetCols
-
-				tx := float32((variant % cols) * tm.Tilesize)
-				ty := float32((variant / cols) * tm.Tilesize)
-				srcRect := rl.NewRectangle(tx, ty, float32(tm.Tilesize), float32(tm.Tilesize))
-				rl.DrawTextureRec(tm.tilesetAsset, srcRect, viewpos, rl.White)
+				tm.DrawTile(tile, offset)
 			}
 		}
 	}
+
 	// Draw obstacles
 	// for obstaclePos := range tm.Obstacles {
 	// 	rl.DrawRectangle(int32(obstaclePos.X*float32(tm.Tilesize)-offset.X), int32(obstaclePos.Y*float32(tm.Tilesize)-offset.Y), int32(tm.Tilesize), int32(tm.Tilesize), rl.White)
 	// }
+}
+
+func (tm *Tilemap) DrawRoof(offset rl.Vector2) {
+	for _, obj := range tm.Roofs {
+		if obj.Type == "house_roof_float_front" || obj.Type == "house_roof_float" {
+			continue
+		}
+		tm.DrawTile(obj, offset)
+	}
+}
+
+func (tm *Tilemap) DrawTile(tile Tile, offset rl.Vector2) {
+	cols := tm.tilesetCols
+	tx := float32((tile.Variant % cols) * tm.Tilesize)
+	ty := float32((tile.Variant / cols) * tm.Tilesize)
+	srcRect := rl.NewRectangle(tx, ty, float32(tm.Tilesize), float32(tm.Tilesize))
+
+	cellpos := tile.Pos
+	viewpos := rl.Vector2Subtract(rl.NewVector2(cellpos.X*float32(tm.Tilesize), cellpos.Y*float32(tm.Tilesize)), offset)
+	rl.DrawTextureRec(tm.tilesetAsset, srcRect, viewpos, rl.White)
 }
 
 func (tm *Tilemap) ExtractObjectOne(obj string) *Tile {
@@ -126,6 +145,19 @@ func (tm *Tilemap) ExtractObjectOne(obj string) *Tile {
 		return &res
 	}
 	return nil
+}
+
+func (tm *Tilemap) ExtractObjects(objs []string) []Tile {
+	tiles := []Tile{}
+	for i := 0; i < len(tm.Objects); i++ {
+		o := tm.Objects[i]
+		if slices.Contains(objs, o.Type) {
+			tm.Objects = append(tm.Objects[:i], tm.Objects[i+1:]...)
+			i-- // Since we just deleted a[i], we must redo that index
+			tiles = append(tiles, o)
+		}
+	}
+	return tiles
 }
 
 var NEIGHBOR_OFFSET = []rl.Vector2{
@@ -152,18 +184,19 @@ func (tm *Tilemap) GetObstaclesAround(pos rl.Vector2) []rl.Rectangle {
 	return res
 }
 
-func computeCellRange(start float64, end float64, tilesize float64) (int, int) {
-	var sc = math.Floor(start / tilesize)
-	var startC = int(sc)
-	if sc < 0 {
-		startC -= 1
+func (tm *Tilemap) GetFloatingRoofs() []Tile {
+	return filter(tm.Roofs, func(t Tile) bool {
+		return t.Type == "house_roof_float" || t.Type == "house_roof_float_front"
+	})
+}
+
+func filter[T any](ss []T, test func(T) bool) (ret []T) {
+	for _, s := range ss {
+		if test(s) {
+			ret = append(ret, s)
+		}
 	}
-	var ec = math.Floor(end / tilesize)
-	var endC = int(ec) + 1
-	if ec < 0 {
-		endC -= 1
-	}
-	return startC, endC
+	return
 }
 
 func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
@@ -212,7 +245,34 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 			}
 		}
 	}
+	sort.SliceStable(tm.Objects, func(i, j int) bool {
+		return tm.Objects[i].Center(float32(tm.Tilesize)).Y < tm.Objects[j].Center(float32(tm.Tilesize)).Y
+	})
+
+	houseRoofs := []string{"house_roof_float", "house_roof_float_front", "house_roof", "house_roof_front"}
+	tm.Roofs = tm.ExtractObjects(houseRoofs)
+	sort.SliceStable(tm.Roofs, func(i, j int) bool {
+		if tm.Roofs[i].Type == tm.Roofs[j].Type {
+			return tm.Roofs[i].Center(float32(tm.Tilesize)).Y < tm.Roofs[j].Center(float32(tm.Tilesize)).Y
+		}
+		return slices.Index(houseRoofs, tm.Roofs[i].Type) < slices.Index(houseRoofs, tm.Roofs[i].Type)
+	})
+
 	return tm
+}
+
+func computeCellRange(start float64, end float64, tilesize float64) (int, int) {
+	var sc = math.Floor(start / tilesize)
+	var startC = int(sc)
+	if sc < 0 {
+		startC -= 1
+	}
+	var ec = math.Floor(end / tilesize)
+	var endC = int(ec) + 1
+	if ec < 0 {
+		endC -= 1
+	}
+	return startC, endC
 }
 
 type AnimStyle = struct {
@@ -439,6 +499,20 @@ func (p *Player) Hitbox(offset rl.Vector2) rl.Rectangle {
 	return rl.NewRectangle(p.Pos.X+p.HitAreaOffset.X-offset.X, p.Pos.Y+p.HitAreaOffset.Y-offset.Y, p.HitAreaOffset.Width, p.HitAreaOffset.Height)
 }
 
+type Sprite struct {
+	Draw   func(offset rl.Vector2)
+	Center func() rl.Vector2
+}
+
+func DrawDepth(offset rl.Vector2, sprites []Sprite) {
+	slices.SortStableFunc(sprites, func(a Sprite, b Sprite) int {
+		return int(b.Center().Y - a.Center().Y)
+	})
+	for _, sprite := range sprites {
+		sprite.Draw(offset)
+	}
+}
+
 func main() {
 	const WIDTH = 1280
 	const HEIGHT = 720
@@ -509,8 +583,34 @@ func main() {
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)
-		tm.Draw(camScroll, rl.NewVector2(WIDTH, HEIGHT))
-		player.Draw(camScroll)
+		tm.DrawTerrain(camScroll, rl.NewVector2(WIDTH, HEIGHT))
+		sprites := []Sprite{}
+		for _, t := range tm.Objects {
+			if t.Type == "house_walls" {
+				tm.DrawTile(t, camScroll)
+
+			} else {
+				sprites = append(sprites, Sprite{
+					Draw: func(offset rl.Vector2) {
+						tm.DrawTile(t, offset)
+					},
+					Center: func() rl.Vector2 {
+						return t.Center(float32(tm.Tilesize))
+					},
+				})
+			}
+		}
+		for _, t := range tm.GetFloatingRoofs() {
+			tm.DrawTile(t, camScroll)
+		}
+
+		sprites = append(sprites, Sprite{
+			Draw:   player.Draw,
+			Center: player.Center,
+		})
+		DrawDepth(camScroll, sprites)
+
+		tm.DrawRoof(camScroll)
 		rl.EndDrawing()
 	}
 }
