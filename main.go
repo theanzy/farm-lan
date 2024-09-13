@@ -83,6 +83,7 @@ type Tilemap struct {
 	Tilesize     int
 	tilesetCols  int
 	Roofs        []Tile
+	TileScale    int
 }
 
 func (tm Tilemap) Unload() {
@@ -211,6 +212,7 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 	tm.tilesetAsset = rl.LoadTextureFromImage(img)
 	tm.Obstacles = map[rl.Vector2]bool{}
 	tm.Objects = []Tile{}
+	tm.TileScale = scale
 
 	var width = tmd.Width
 	sort.SliceStable(tmd.Layers, func(i, j int) bool {
@@ -393,9 +395,11 @@ type Player struct {
 	AnimState         string
 	BaseAnimations    map[string]Animation
 	Flipped           bool
+	Tool              string
+	Tools             []string
 }
 
-func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, animStylesFlipped AnimStyles) Player {
+func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, animStylesFlipped AnimStyles, tools []string) Player {
 	playerImg := animStyles["IDLE"].Base
 	stripCount := animStyles["IDLE"].StripCount
 
@@ -429,7 +433,18 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 		AnimState:         "IDLE",
 		BaseAnimations:    baseAnimations,
 		Flipped:           false,
+		Tool:              "water",
+		Tools:             tools,
 	}
+}
+
+func (p *Player) SwitchTool() {
+	idx := slices.Index(p.Tools, p.Tool)
+	idx += 1
+	if idx >= len(p.Tools) {
+		idx = 0
+	}
+	p.Tool = p.Tools[idx]
 }
 
 func (p *Player) Center() rl.Vector2 {
@@ -512,6 +527,20 @@ func DrawDepth(offset rl.Vector2, sprites []Sprite, drawRoof bool) {
 	}
 }
 
+func LoadToolUIAssets() map[string]rl.Texture2D {
+	res := map[string]rl.Texture2D{}
+	res["axe"] = rl.LoadTexture("./resources/UI/axe.png")
+	res["shovel"] = rl.LoadTexture("./resources/UI/shovel.png")
+	res["water"] = rl.LoadTexture("./resources/UI/water.png")
+	return res
+}
+
+func UnloadTextureMap[K comparable](assets map[K]rl.Texture2D) {
+	for _, tex := range assets {
+		rl.UnloadTexture(tex)
+	}
+}
+
 func main() {
 	const WIDTH = 1280
 	const HEIGHT = 720
@@ -529,6 +558,13 @@ func main() {
 	humanAnimStylesFlipped := FlipAnimStyles(humanAnimStyles)
 	defer UnloadAnimStyles(humanAnimStylesFlipped)
 
+	toolUiAssets := LoadToolUIAssets()
+	defer UnloadTextureMap(toolUiAssets)
+	tools := []string{}
+	for t := range toolUiAssets {
+		tools = append(tools, t)
+	}
+
 	playerTile := tm.ExtractObjectOne("player")
 	if playerTile == nil {
 		return
@@ -540,6 +576,7 @@ func main() {
 		tm.Tilesize/originalTilesize,
 		humanAnimStyles,
 		humanAnimStylesFlipped,
+		tools,
 	)
 
 	depthSprites := []Sprite{}
@@ -595,6 +632,11 @@ func main() {
 			playerMoveX[1] = 0
 		}
 
+		if rl.IsKeyPressed(rl.KeyS) {
+			player.SwitchTool()
+
+		}
+
 		camScrollDest := rl.NewVector2(player.Pos.X-WIDTH/2, player.Pos.Y-HEIGHT/2)
 		dCamScroll := rl.NewVector2((camScrollDest.X-camScroll.X)*2, (camScrollDest.Y-camScroll.Y)*2)
 
@@ -614,6 +656,9 @@ func main() {
 		}
 		DrawDepth(camScroll, depthSprites, true)
 		tm.DrawRoof(camScroll)
+
+		// draw ui
+		rl.DrawTextureEx(toolUiAssets[player.Tool], rl.NewVector2(float32(tm.Tilesize), float32(HEIGHT-60)), 0, float32(tm.TileScale), rl.White)
 		rl.EndDrawing()
 	}
 }

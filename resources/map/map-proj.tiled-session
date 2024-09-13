@@ -9,11 +9,11 @@
     ],
     "fileStates": {
         "0.tmj": {
-            "scale": 5.5,
-            "selectedLayer": 0,
+            "scale": 1.5,
+            "selectedLayer": 15,
             "viewCenter": {
-                "x": 811.7272727272727,
-                "y": 83
+                "x": 888.3333333333334,
+                "y": 606.3333333333333
             }
         },
         "tilesets.tsx": {
