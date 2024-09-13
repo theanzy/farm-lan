@@ -9,15 +9,15 @@
     ],
     "fileStates": {
         "0.tmj": {
-            "scale": 1.5,
-            "selectedLayer": 16,
+            "scale": 5.5,
+            "selectedLayer": 0,
             "viewCenter": {
-                "x": 853.6666666666667,
-                "y": 240.33333333333331
+                "x": 811.7272727272727,
+                "y": 83
             }
         },
         "tilesets.tsx": {
-            "scaleInDock": 2,
+            "scaleInDock": 1.5,
             "scaleInEditor": 1
         }
     },

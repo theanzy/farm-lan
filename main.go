@@ -185,18 +185,17 @@ func (tm *Tilemap) GetObstaclesAround(pos rl.Vector2) []rl.Rectangle {
 }
 
 func (tm *Tilemap) GetFloatingRoofs() []Tile {
-	return filter(tm.Roofs, func(t Tile) bool {
-		return t.Type == "house_roof_float" || t.Type == "house_roof_float_front"
-	})
+	return tm.GetTiles(tm.Roofs, []string{"house_roof_float", "house_roof_float_front"})
 }
 
-func filter[T any](ss []T, test func(T) bool) (ret []T) {
-	for _, s := range ss {
-		if test(s) {
-			ret = append(ret, s)
+func (tm *Tilemap) GetTiles(tiles []Tile, types []string) []Tile {
+	res := []Tile{}
+	for _, s := range tiles {
+		if slices.Contains(types, s.Type) {
+			res = append(res, s)
 		}
 	}
-	return
+	return res
 }
 
 func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
@@ -500,16 +499,16 @@ func (p *Player) Hitbox(offset rl.Vector2) rl.Rectangle {
 }
 
 type Sprite struct {
-	Draw   func(offset rl.Vector2)
+	Draw   func(offset rl.Vector2, drawRoof bool)
 	Center func() rl.Vector2
 }
 
-func DrawDepth(offset rl.Vector2, sprites []Sprite) {
+func DrawDepth(offset rl.Vector2, sprites []Sprite, drawRoof bool) {
 	slices.SortStableFunc(sprites, func(a Sprite, b Sprite) int {
 		return int(b.Center().Y - a.Center().Y)
 	})
 	for _, sprite := range sprites {
-		sprite.Draw(offset)
+		sprite.Draw(offset, drawRoof)
 	}
 }
 
@@ -542,6 +541,28 @@ func main() {
 		humanAnimStyles,
 		humanAnimStylesFlipped,
 	)
+
+	depthSprites := []Sprite{}
+
+	for _, t := range tm.Objects {
+		if t.Type != "house_walls" {
+			depthSprites = append(depthSprites, Sprite{
+				Draw: func(offset rl.Vector2, drawRoof bool) {
+					tm.DrawTile(t, offset)
+				},
+				Center: func() rl.Vector2 {
+					return t.Center(float32(tm.Tilesize))
+				},
+			})
+		}
+	}
+
+	depthSprites = append(depthSprites, Sprite{
+		Draw: func(offset rl.Vector2, drawRoof bool) {
+			player.Draw(offset)
+		},
+		Center: player.Center,
+	})
 
 	var camScroll = rl.NewVector2(0, 0)
 	for !rl.WindowShouldClose() {
@@ -584,32 +605,14 @@ func main() {
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)
 		tm.DrawTerrain(camScroll, rl.NewVector2(WIDTH, HEIGHT))
-		sprites := []Sprite{}
-		for _, t := range tm.Objects {
-			if t.Type == "house_walls" {
-				tm.DrawTile(t, camScroll)
-
-			} else {
-				sprites = append(sprites, Sprite{
-					Draw: func(offset rl.Vector2) {
-						tm.DrawTile(t, offset)
-					},
-					Center: func() rl.Vector2 {
-						return t.Center(float32(tm.Tilesize))
-					},
-				})
-			}
-		}
-		for _, t := range tm.GetFloatingRoofs() {
+		for _, t := range tm.GetTiles(tm.Objects, []string{"house_walls"}) {
 			tm.DrawTile(t, camScroll)
 		}
 
-		sprites = append(sprites, Sprite{
-			Draw:   player.Draw,
-			Center: player.Center,
-		})
-		DrawDepth(camScroll, sprites)
-
+		for _, t := range tm.GetFloatingRoofs() {
+			tm.DrawTile(t, camScroll)
+		}
+		DrawDepth(camScroll, depthSprites, true)
 		tm.DrawRoof(camScroll)
 		rl.EndDrawing()
 	}
