@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"math"
@@ -381,13 +380,14 @@ type Player struct {
 	AnimState         string
 	BaseAnimations    map[string]Animation
 	ToolAnimations    map[string]Animation
+	StyleAnimations   map[string]Animation
 	Flipped           bool
 	Tool              string
 	Tools             []string
 	ToolCounter       float32
 }
 
-func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, animStylesFlipped AnimStyles, tools []string) Player {
+func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, animStylesFlipped AnimStyles, tools []string, style string) Player {
 	playerImg := animStyles["IDLE"].Base
 	stripCount := animStyles["IDLE"].StripCount
 
@@ -400,6 +400,7 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 
 	baseAnimations := map[string]Animation{}
 	toolAnimations := map[string]Animation{}
+	styleAnimations := map[string]Animation{}
 	animSpeed := 20
 	for anim, animStyle := range animStyles {
 		baseAnimations[anim] = Animation{
@@ -410,6 +411,25 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 			StripCount:   float32(animStyle.StripCount),
 			ImageFlipped: animStylesFlipped[anim].Base,
 		}
+
+		baseAnimations[anim] = Animation{
+			Image:        animStyle.Base,
+			AssetSize:    assetSize,
+			X:            0,
+			Speed:        float32(animSpeed),
+			StripCount:   float32(animStyle.StripCount),
+			ImageFlipped: animStylesFlipped[anim].Base,
+		}
+		if _, ok := animStyle.Variants[style]; ok {
+			styleAnimations[anim] = Animation{
+				Image:        animStyle.Variants[style],
+				AssetSize:    assetSize,
+				X:            0,
+				Speed:        float32(animSpeed),
+				StripCount:   float32(animStyle.StripCount),
+				ImageFlipped: animStylesFlipped[anim].Variants[style],
+			}
+		}
 		if _, ok := animStyle.Variants["tools"]; ok {
 			toolAnimations[anim] = Animation{
 				Image:        animStyle.Variants["tools"],
@@ -419,7 +439,6 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 				StripCount:   float32(animStyle.StripCount),
 				ImageFlipped: animStylesFlipped[anim].Variants["tools"],
 			}
-			fmt.Println(anim)
 		}
 	}
 
@@ -434,6 +453,7 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 		AnimState:         "IDLE",
 		BaseAnimations:    baseAnimations,
 		ToolAnimations:    toolAnimations,
+		StyleAnimations:   styleAnimations,
 		Flipped:           false,
 		Tool:              "water",
 		Tools:             tools,
@@ -521,13 +541,21 @@ func (p *Player) Update(dt float32, movement rl.Vector2, getObstacles func(pos r
 		}
 	}
 
+	isToolAnimState := slices.Contains([]string{"WATERING", "DIG", "AXE"}, p.AnimState)
+
 	baseAnim := p.BaseAnimations[p.AnimState]
 	baseAnim.Update(dt)
-	isToolAnimState := slices.Contains([]string{"WATERING", "DIG", "AXE"}, p.AnimState)
 	if p.ToolCounter <= 0 && isToolAnimState {
 		baseAnim.Reset()
 	}
 	p.BaseAnimations[p.AnimState] = baseAnim
+
+	styleAnim := p.StyleAnimations[p.AnimState]
+	styleAnim.Update(dt)
+	if p.ToolCounter <= 0 && isToolAnimState {
+		styleAnim.Reset()
+	}
+	p.StyleAnimations[p.AnimState] = styleAnim
 
 	if toolAnim, ok := p.ToolAnimations[p.AnimState]; ok {
 		toolAnim.Update(dt)
@@ -542,11 +570,20 @@ func (p Player) Draw(offset rl.Vector2) {
 	destRect := rl.NewRectangle(p.Pos.X-offset.X, p.Pos.Y-offset.Y, p.Size.X, p.Size.Y)
 	// base
 	baseAnim := p.BaseAnimations[p.AnimState]
-	img := baseAnim.Image
+	baseImg := baseAnim.Image
 	if p.Flipped {
-		img = baseAnim.ImageFlipped
+		baseImg = baseAnim.ImageFlipped
 	}
-	rl.DrawTexturePro(img, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+	rl.DrawTexturePro(baseImg, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+	styleAnim := p.StyleAnimations[p.AnimState]
+	styleImg := styleAnim.Image
+	if p.Flipped {
+		styleImg = styleAnim.ImageFlipped
+	}
+	rl.DrawTexturePro(styleImg, styleAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+	if p.ToolCounter == 0 {
+		p.DrawTool(offset)
+	}
 }
 
 func (p Player) DrawTool(offset rl.Vector2) {
@@ -628,6 +665,7 @@ func main() {
 		humanAnimStyles,
 		humanAnimStylesFlipped,
 		tools,
+		"shorthair",
 	)
 
 	depthSprites := []Sprite{}
@@ -707,7 +745,10 @@ func main() {
 			tm.DrawTile(t, camScroll)
 		}
 		DrawDepth(camScroll, depthSprites, true)
-		player.DrawTool(camScroll)
+		if player.ToolCounter > 0 {
+			player.DrawTool(camScroll)
+		}
+
 		tm.DrawRoof(camScroll)
 
 		// draw ui
