@@ -539,7 +539,6 @@ func (p *Player) Update(dt float32, movement rl.Vector2, getObstacles func(pos r
 }
 
 func (p Player) Draw(offset rl.Vector2) {
-	rl.DrawRectangleRec(p.Hitbox(offset), rl.Red)
 	destRect := rl.NewRectangle(p.Pos.X-offset.X, p.Pos.Y-offset.Y, p.Size.X, p.Size.Y)
 	// base
 	baseAnim := p.BaseAnimations[p.AnimState]
@@ -548,8 +547,10 @@ func (p Player) Draw(offset rl.Vector2) {
 		img = baseAnim.ImageFlipped
 	}
 	rl.DrawTexturePro(img, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+}
 
-	// tool
+func (p Player) DrawTool(offset rl.Vector2) {
+	destRect := rl.NewRectangle(p.Pos.X-offset.X, p.Pos.Y-offset.Y, p.Size.X, p.Size.Y)
 	if toolAnim, ok := p.ToolAnimations[p.AnimState]; ok {
 		img := toolAnim.Image
 		if p.Flipped {
@@ -706,6 +707,7 @@ func main() {
 			tm.DrawTile(t, camScroll)
 		}
 		DrawDepth(camScroll, depthSprites, true)
+		player.DrawTool(camScroll)
 		tm.DrawRoof(camScroll)
 
 		// draw ui
