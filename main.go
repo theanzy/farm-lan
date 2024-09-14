@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -83,7 +84,14 @@ type Tilemap struct {
 	Tilesize     int
 	tilesetCols  int
 	Roofs        []Tile
+	FarmTiles    map[rl.Vector2]FarmTile
 	TileScale    int
+}
+type FarmTile struct {
+	Pos rl.Vector2
+	// empty, digged, planted
+	State    string
+	PlantAge int
 }
 
 func (tm Tilemap) Unload() {
@@ -103,6 +111,14 @@ func (tm *Tilemap) DrawTerrain(offset rl.Vector2, screenSize rl.Vector2) {
 				}
 				tm.DrawTile(tile, offset)
 			}
+		}
+	}
+	for _, ft := range tm.FarmTiles {
+		if ft.State == "digged" {
+
+			cellpos := ft.Pos
+			viewpos := rl.Vector2Subtract(rl.NewVector2(cellpos.X*float32(tm.Tilesize), cellpos.Y*float32(tm.Tilesize)), offset)
+			rl.DrawRectangleV(viewpos, rl.NewVector2(float32(tm.Tilesize), float32(tm.Tilesize)), rl.NewColor(150, 81, 9, 50))
 		}
 	}
 
@@ -161,6 +177,13 @@ func (tm *Tilemap) ExtractObjects(objs []string) []Tile {
 	return tiles
 }
 
+func (tm *Tilemap) GetObstaclesAround(pos rl.Vector2) []rl.Rectangle {
+	return GetTileRectsAround(tm.Obstacles, pos, float32(tm.Tilesize))
+}
+func (tm *Tilemap) GetFarmRectsAround(pos rl.Vector2) []rl.Rectangle {
+	return GetTileRectsAround(tm.FarmTiles, pos, float32(tm.Tilesize))
+}
+
 var NEIGHBOR_OFFSET = []rl.Vector2{
 	rl.NewVector2(-1, -1),
 	rl.NewVector2(0, -1),
@@ -170,19 +193,39 @@ var NEIGHBOR_OFFSET = []rl.Vector2{
 	rl.NewVector2(-1, 1),
 	rl.NewVector2(0, 1),
 	rl.NewVector2(1, 1),
+	rl.NewVector2(0, 0),
 }
 
-func (tm *Tilemap) GetObstaclesAround(pos rl.Vector2) []rl.Rectangle {
+func GetTileRectsAround[V any](tiles map[rl.Vector2]V, pos rl.Vector2, tilesize float32) []rl.Rectangle {
 	var res = []rl.Rectangle{}
-	cellPos := rl.NewVector2(float32(math.Floor(float64(pos.X)/float64(tm.Tilesize))), float32(math.Floor(float64(pos.Y)/float64(tm.Tilesize))))
+	cellPos := GetCellPos(pos, float64(tilesize))
 	for _, offset := range NEIGHBOR_OFFSET {
 		neighborPos := rl.NewVector2(cellPos.X+offset.X, cellPos.Y+offset.Y)
-		if ok := tm.Obstacles[neighborPos]; ok {
-			res = append(res, rl.NewRectangle(neighborPos.X*float32(tm.Tilesize), neighborPos.Y*float32(tm.Tilesize), float32(tm.Tilesize), float32(tm.Tilesize)))
+		if _, ok := tiles[neighborPos]; ok {
+			res = append(
+				res,
+				rl.NewRectangle(
+					neighborPos.X*tilesize,
+					neighborPos.Y*tilesize,
+					tilesize,
+					tilesize,
+				),
+			)
 		}
 	}
-
 	return res
+}
+
+func (tm *Tilemap) AddFarmHole(pos rl.Vector2) {
+	cellpos := GetCellPos(pos, float64(tm.Tilesize))
+	if t, ok := tm.FarmTiles[cellpos]; ok {
+		t.State = "digged"
+		tm.FarmTiles[cellpos] = t
+	}
+}
+
+func GetCellPos(pos rl.Vector2, tilesize float64) rl.Vector2 {
+	return rl.NewVector2(float32(math.Floor(float64(pos.X)/tilesize)), float32(math.Floor(float64(pos.Y)/tilesize)))
 }
 
 func (tm *Tilemap) GetFloatingRoofs() []Tile {
@@ -212,6 +255,7 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 	tm.tilesetAsset = rl.LoadTextureFromImage(img)
 	tm.Obstacles = map[rl.Vector2]bool{}
 	tm.Objects = []Tile{}
+	tm.FarmTiles = map[rl.Vector2]FarmTile{}
 	tm.TileScale = scale
 
 	var width = tmd.Width
@@ -230,6 +274,13 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 				tm.Obstacles[cellpos] = true
 				continue
 			}
+			if layer.Name == "farm_tile" && id > 0 {
+				tm.FarmTiles[cellpos] = FarmTile{
+					Pos:      cellpos,
+					State:    "empty",
+					PlantAge: 0,
+				}
+			}
 			if id == 0 {
 				continue
 			}
@@ -246,6 +297,7 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 			}
 		}
 	}
+	fmt.Println(tm.FarmTiles)
 	sort.SliceStable(tm.Objects, func(i, j int) bool {
 		return tm.Objects[i].Center(float32(tm.Tilesize)).Y < tm.Objects[j].Center(float32(tm.Tilesize)).Y
 	})
@@ -401,7 +453,7 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 	baseAnimations := map[string]Animation{}
 	toolAnimations := map[string]Animation{}
 	styleAnimations := map[string]Animation{}
-	animSpeed := 20
+	animSpeed := 12
 	for anim, animStyle := range animStyles {
 		baseAnimations[anim] = Animation{
 			Image:        animStyle.Base,
@@ -484,7 +536,7 @@ func (p *Player) Center() rl.Vector2 {
 	return rl.NewVector2(p.Pos.X+p.Size.X*0.5, p.Pos.Y+p.Size.Y*0.5)
 }
 
-func (p *Player) Update(dt float32, movement rl.Vector2, getObstacles func(pos rl.Vector2) []rl.Rectangle) {
+func (p *Player) Update(dt float32, movement rl.Vector2, getObstacles func(pos rl.Vector2) []rl.Rectangle, addFarmHole func(pos rl.Vector2)) {
 	frameMovement := rl.Vector2Normalize(movement)
 	if p.ToolCounter == 0 {
 		p.Pos.X += frameMovement.X * dt * 150
@@ -559,10 +611,13 @@ func (p *Player) Update(dt float32, movement rl.Vector2, getObstacles func(pos r
 
 	if toolAnim, ok := p.ToolAnimations[p.AnimState]; ok {
 		toolAnim.Update(dt)
-		p.ToolAnimations[p.AnimState] = toolAnim
 		if p.ToolCounter <= 0 && isToolAnimState {
+			if p.AnimState == "DIG" {
+				addFarmHole(p.ToolHitPoint())
+			}
 			toolAnim.Reset()
 		}
+		p.ToolAnimations[p.AnimState] = toolAnim
 	}
 }
 
@@ -584,6 +639,16 @@ func (p Player) Draw(offset rl.Vector2) {
 	if p.ToolCounter == 0 {
 		p.DrawTool(offset)
 	}
+}
+
+func (p *Player) ToolHitPoint() rl.Vector2 {
+	var pos rl.Vector2
+	if p.Flipped {
+		pos = rl.NewVector2(p.Center().X-float32(p.TileSize), p.Center().Y+float32(p.TileSize)/3)
+	} else {
+		pos = rl.NewVector2(p.Center().X+float32(p.TileSize), p.Center().Y+float32(p.TileSize)/3)
+	}
+	return pos
 }
 
 func (p Player) DrawTool(offset rl.Vector2) {
@@ -724,7 +789,21 @@ func main() {
 		if rl.IsKeyPressed(rl.KeyS) {
 			player.SwitchTool()
 		} else if rl.IsKeyPressed(rl.KeyC) {
-			player.UseTool()
+			if player.Tool == "shovel" && player.ToolCounter == 0 {
+				hp := player.ToolHitPoint()
+				rects := tm.GetFarmRectsAround(hp)
+				idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
+					return rl.CheckCollisionCircleRec(hp, 5, r)
+				})
+				if idx != -1 {
+					// TODO add digged tile, dont dig again if digged
+					r := rects[idx]
+					p := GetCellPos(rl.NewVector2(r.X, r.Y), float64(tm.Tilesize))
+					if ft, ok := tm.FarmTiles[p]; ok && ft.State == "empty" {
+						player.UseTool()
+					}
+				}
+			}
 		}
 
 		camScrollDest := rl.NewVector2(player.Pos.X-WIDTH/2, player.Pos.Y-HEIGHT/2)
@@ -732,7 +811,7 @@ func main() {
 
 		camScroll.X += dCamScroll.X * dt
 		camScroll.Y += dCamScroll.Y * dt
-		player.Update(dt, rl.NewVector2(playerMoveX[1]-playerMoveX[0], playerMoveY[1]-playerMoveY[0]), tm.GetObstaclesAround)
+		player.Update(dt, rl.NewVector2(playerMoveX[1]-playerMoveX[0], playerMoveY[1]-playerMoveY[0]), tm.GetObstaclesAround, tm.AddFarmHole)
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)

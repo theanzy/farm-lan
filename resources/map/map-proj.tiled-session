@@ -8,13 +8,22 @@
         "."
     ],
     "fileStates": {
+        "": {
+            "scaleInDock": 1
+        },
         "0.tmj": {
-            "scale": 1.5,
-            "selectedLayer": 15,
+            "scale": 4,
+            "selectedLayer": 20,
             "viewCenter": {
-                "x": 888.3333333333334,
-                "y": 606.3333333333333
+                "x": 656,
+                "y": 176.25
             }
+        },
+        "0.tmj#plain-color": {
+            "scaleInDock": 1
+        },
+        "0.tmj#tilesets": {
+            "scaleInDock": 1
         },
         "tilesets.tsx": {
             "scaleInDock": 1.5,
@@ -36,6 +45,7 @@
         "0.tmj",
         "tilesets.tsx"
     ],
+    "tileset.embedInMap": true,
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {
         "height": 16,
