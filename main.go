@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -291,7 +292,8 @@ func NewAnimStyles(dir string) AnimStyles {
 		log.Fatal(err)
 	}
 	r := regexp.MustCompile(`[a-z](\d+)\.png`)
-	supportedStyles := []string{"IDLE", "WALKING"}
+
+	supportedStyles := []string{"IDLE", "WALKING", "WATERING", "DIG", "AXE"}
 
 	for _, e := range entries {
 		if !slices.Contains(supportedStyles, e.Name()) {
@@ -335,25 +337,6 @@ func FlipTextureHorizontal(tex rl.Texture2D) rl.Texture2D {
 	return rl.LoadTextureFromImage(baseImg)
 }
 
-func FlipAnimStyles(animStyles AnimStyles) AnimStyles {
-	var res = AnimStyles{}
-	for name, style := range animStyles {
-		baseImg := rl.LoadImageFromTexture(style.Base)
-		defer rl.UnloadImage(baseImg)
-		rl.ImageFlipHorizontal(baseImg)
-		variants := map[string]rl.Texture2D{}
-		for variant, img := range style.Variants {
-			variants[variant] = FlipTextureHorizontal(img)
-		}
-		res[name] = AnimStyle{
-			Base:       FlipTextureHorizontal(style.Base),
-			StripCount: style.StripCount,
-			Variants:   variants,
-		}
-	}
-	return res
-}
-
 func UnloadAnimStyles(s AnimStyles) {
 	for _, style := range s {
 		rl.UnloadTexture(style.Base)
@@ -378,6 +361,9 @@ func (a *Animation) Update(dt float32) {
 		a.X = 0
 	}
 }
+func (a *Animation) Reset() {
+	a.X = 0
+}
 
 func (a Animation) SrcRect() rl.Rectangle {
 	x := float32(math.Floor(float64(a.X)))
@@ -394,9 +380,11 @@ type Player struct {
 	AnimStylesFlipped AnimStyles
 	AnimState         string
 	BaseAnimations    map[string]Animation
+	ToolAnimations    map[string]Animation
 	Flipped           bool
 	Tool              string
 	Tools             []string
+	ToolCounter       float32
 }
 
 func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, animStylesFlipped AnimStyles, tools []string) Player {
@@ -411,14 +399,27 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 	hitRect := rl.NewRectangle(size.X/2-hitboxSize/2, size.Y/2-hitboxSize/2, hitboxSize, hitboxSize)
 
 	baseAnimations := map[string]Animation{}
+	toolAnimations := map[string]Animation{}
+	animSpeed := 20
 	for anim, animStyle := range animStyles {
 		baseAnimations[anim] = Animation{
 			Image:        animStyle.Base,
 			AssetSize:    assetSize,
 			X:            0,
-			Speed:        20,
+			Speed:        float32(animSpeed),
 			StripCount:   float32(animStyle.StripCount),
 			ImageFlipped: animStylesFlipped[anim].Base,
+		}
+		if _, ok := animStyle.Variants["tools"]; ok {
+			toolAnimations[anim] = Animation{
+				Image:        animStyle.Variants["tools"],
+				AssetSize:    assetSize,
+				X:            0,
+				Speed:        float32(animSpeed),
+				StripCount:   float32(animStyle.StripCount),
+				ImageFlipped: animStylesFlipped[anim].Variants["tools"],
+			}
+			fmt.Println(anim)
 		}
 	}
 
@@ -432,13 +433,18 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 		AnimStylesFlipped: animStylesFlipped,
 		AnimState:         "IDLE",
 		BaseAnimations:    baseAnimations,
+		ToolAnimations:    toolAnimations,
 		Flipped:           false,
 		Tool:              "water",
 		Tools:             tools,
+		ToolCounter:       0,
 	}
 }
 
 func (p *Player) SwitchTool() {
+	if p.ToolCounter > 0 {
+		return
+	}
 	idx := slices.Index(p.Tools, p.Tool)
 	idx += 1
 	if idx >= len(p.Tools) {
@@ -447,66 +453,110 @@ func (p *Player) SwitchTool() {
 	p.Tool = p.Tools[idx]
 }
 
+func (p *Player) UseTool() {
+	if p.ToolCounter > 0 {
+		return
+	}
+	p.ToolCounter = 200
+}
+
 func (p *Player) Center() rl.Vector2 {
 	return rl.NewVector2(p.Pos.X+p.Size.X*0.5, p.Pos.Y+p.Size.Y*0.5)
 }
 
 func (p *Player) Update(dt float32, movement rl.Vector2, getObstacles func(pos rl.Vector2) []rl.Rectangle) {
 	frameMovement := rl.Vector2Normalize(movement)
-	p.Pos.X += frameMovement.X * dt * 150
-	for _, obstacle := range getObstacles(p.Center()) {
-		hitbox := p.Hitbox(rl.NewVector2(0, 0))
-		if rl.CheckCollisionRecs(hitbox, obstacle) {
-			if frameMovement.X > 0 {
-				p.Pos.X = obstacle.X - hitbox.Width - p.HitAreaOffset.X
-			} else if frameMovement.X < 0 {
-				p.Pos.X = obstacle.X + obstacle.Width - p.HitAreaOffset.X
+	if p.ToolCounter == 0 {
+		p.Pos.X += frameMovement.X * dt * 150
+		for _, obstacle := range getObstacles(p.Center()) {
+			hitbox := p.Hitbox(rl.NewVector2(0, 0))
+			if rl.CheckCollisionRecs(hitbox, obstacle) {
+				if frameMovement.X > 0 {
+					p.Pos.X = obstacle.X - hitbox.Width - p.HitAreaOffset.X
+				} else if frameMovement.X < 0 {
+					p.Pos.X = obstacle.X + obstacle.Width - p.HitAreaOffset.X
+				}
 			}
 		}
-	}
 
-	p.Pos.Y += frameMovement.Y * dt * 150
-	for _, obstacle := range getObstacles(p.Center()) {
-		hitbox := p.Hitbox(rl.NewVector2(0, 0))
-		if rl.CheckCollisionRecs(hitbox, obstacle) {
-			if frameMovement.Y > 0 {
-				p.Pos.Y = obstacle.Y - hitbox.Height - p.HitAreaOffset.Y
-			} else if frameMovement.Y < 0 {
-				p.Pos.Y = obstacle.Y + obstacle.Height - p.HitAreaOffset.Y
+		p.Pos.Y += frameMovement.Y * dt * 150
+		for _, obstacle := range getObstacles(p.Center()) {
+			hitbox := p.Hitbox(rl.NewVector2(0, 0))
+			if rl.CheckCollisionRecs(hitbox, obstacle) {
+				if frameMovement.Y > 0 {
+					p.Pos.Y = obstacle.Y - hitbox.Height - p.HitAreaOffset.Y
+				} else if frameMovement.Y < 0 {
+					p.Pos.Y = obstacle.Y + obstacle.Height - p.HitAreaOffset.Y
+				}
 			}
 		}
 	}
 
 	p.AnimState = "IDLE"
-	if movement.Y > 0 {
-		p.AnimState = "WALKING"
-	}
-	if movement.Y < 0 {
-		p.AnimState = "WALKING"
-	}
-	if movement.X > 0 {
-		p.AnimState = "WALKING"
-		p.Flipped = false
-	}
-	if movement.X < 0 {
-		p.AnimState = "WALKING"
-		p.Flipped = true
+	if p.ToolCounter > 0 {
+		p.ToolCounter -= 100 * dt
+		switch p.Tool {
+		case "water":
+			p.AnimState = "WATERING"
+		case "shovel":
+			p.AnimState = "DIG"
+		case "axe":
+			p.AnimState = "AXE"
+		}
+	} else {
+		p.ToolCounter = 0
+		if movement.Y > 0 {
+			p.AnimState = "WALKING"
+		}
+		if movement.Y < 0 {
+			p.AnimState = "WALKING"
+		}
+		if movement.X > 0 {
+			p.AnimState = "WALKING"
+			p.Flipped = false
+		}
+		if movement.X < 0 {
+			p.AnimState = "WALKING"
+			p.Flipped = true
+		}
 	}
 
 	baseAnim := p.BaseAnimations[p.AnimState]
 	baseAnim.Update(dt)
+	isToolAnimState := slices.Contains([]string{"WATERING", "DIG", "AXE"}, p.AnimState)
+	if p.ToolCounter <= 0 && isToolAnimState {
+		baseAnim.Reset()
+	}
 	p.BaseAnimations[p.AnimState] = baseAnim
+
+	if toolAnim, ok := p.ToolAnimations[p.AnimState]; ok {
+		toolAnim.Update(dt)
+		p.ToolAnimations[p.AnimState] = toolAnim
+		if p.ToolCounter <= 0 && isToolAnimState {
+			toolAnim.Reset()
+		}
+	}
 }
 
 func (p Player) Draw(offset rl.Vector2) {
 	rl.DrawRectangleRec(p.Hitbox(offset), rl.Red)
 	destRect := rl.NewRectangle(p.Pos.X-offset.X, p.Pos.Y-offset.Y, p.Size.X, p.Size.Y)
+	// base
 	baseAnim := p.BaseAnimations[p.AnimState]
 	img := baseAnim.Image
 	if p.Flipped {
 		img = baseAnim.ImageFlipped
 	}
 	rl.DrawTexturePro(img, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+
+	// tool
+	if toolAnim, ok := p.ToolAnimations[p.AnimState]; ok {
+		img := toolAnim.Image
+		if p.Flipped {
+			img = toolAnim.ImageFlipped
+		}
+		rl.DrawTexturePro(img, toolAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+	}
 }
 
 func (p *Player) Hitbox(offset rl.Vector2) rl.Rectangle {
@@ -555,7 +605,7 @@ func main() {
 
 	humanAnimStyles := NewAnimStyles("./resources/characters/Human")
 	defer UnloadAnimStyles(humanAnimStyles)
-	humanAnimStylesFlipped := FlipAnimStyles(humanAnimStyles)
+	humanAnimStylesFlipped := NewAnimStyles("./resources/characters_flipped/Human")
 	defer UnloadAnimStyles(humanAnimStylesFlipped)
 
 	toolUiAssets := LoadToolUIAssets()
@@ -634,7 +684,8 @@ func main() {
 
 		if rl.IsKeyPressed(rl.KeyS) {
 			player.SwitchTool()
-
+		} else if rl.IsKeyPressed(rl.KeyC) {
+			player.UseTool()
 		}
 
 		camScrollDest := rl.NewVector2(player.Pos.X-WIDTH/2, player.Pos.Y-HEIGHT/2)
