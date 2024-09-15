@@ -5,17 +5,15 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
-	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
+	"github.com/theanzy/farmsim/internal/anim"
+	"github.com/theanzy/farmsim/internal/world"
 )
 
 type LayerDataProperty struct {
@@ -101,8 +99,8 @@ func (tm Tilemap) Unload() {
 }
 
 func (tm *Tilemap) DrawTerrain(offset rl.Vector2, screenSize rl.Vector2) {
-	cstartX, cendX := computeCellRange(float64(offset.X), float64(offset.X+screenSize.X), float64(tm.Tilesize))
-	cstartY, cendY := computeCellRange(float64(offset.Y), float64(offset.Y+screenSize.Y), float64(tm.Tilesize))
+	cstartX, cendX := world.ComputeCellRange(float64(offset.X), float64(offset.X+screenSize.X), float64(tm.Tilesize))
+	cstartY, cendY := world.ComputeCellRange(float64(offset.Y), float64(offset.Y+screenSize.Y), float64(tm.Tilesize))
 	for _, layers := range tm.TileLayers {
 		for y := cstartY; y <= cendY; y++ {
 			for x := cstartX; x <= cendX; x++ {
@@ -189,54 +187,18 @@ func (tm *Tilemap) ExtractObjects(objs []string) []Tile {
 }
 
 func (tm *Tilemap) GetObstaclesAround(pos rl.Vector2) []rl.Rectangle {
-	return GetTileRectsAround(tm.Obstacles, pos, float32(tm.Tilesize))
+	return world.GetTileRectsAround(tm.Obstacles, pos, float32(tm.Tilesize))
 }
 func (tm *Tilemap) GetFarmRectsAround(pos rl.Vector2) []rl.Rectangle {
-	return GetTileRectsAround(tm.FarmTiles, pos, float32(tm.Tilesize))
-}
-
-var NEIGHBOR_OFFSET = []rl.Vector2{
-	rl.NewVector2(-1, -1),
-	rl.NewVector2(0, -1),
-	rl.NewVector2(1, -1),
-	rl.NewVector2(-1, 0),
-	rl.NewVector2(1, 0),
-	rl.NewVector2(-1, 1),
-	rl.NewVector2(0, 1),
-	rl.NewVector2(1, 1),
-	rl.NewVector2(0, 0),
-}
-
-func GetTileRectsAround[V any](tiles map[rl.Vector2]V, pos rl.Vector2, tilesize float32) []rl.Rectangle {
-	var res = []rl.Rectangle{}
-	cellPos := GetCellPos(pos, float64(tilesize))
-	for _, offset := range NEIGHBOR_OFFSET {
-		neighborPos := rl.NewVector2(cellPos.X+offset.X, cellPos.Y+offset.Y)
-		if _, ok := tiles[neighborPos]; ok {
-			res = append(
-				res,
-				rl.NewRectangle(
-					neighborPos.X*tilesize,
-					neighborPos.Y*tilesize,
-					tilesize,
-					tilesize,
-				),
-			)
-		}
-	}
-	return res
+	return world.GetTileRectsAround(tm.FarmTiles, pos, float32(tm.Tilesize))
 }
 
 func (tm *Tilemap) AddFarmHole(pos rl.Vector2) {
-	cellpos := GetCellPos(pos, float64(tm.Tilesize))
+	cellpos := world.GetCellPos(pos, float64(tm.Tilesize))
 	if t, ok := tm.FarmTiles[cellpos]; ok {
 		t.State = "digged"
 		tm.FarmTiles[cellpos] = t
 	}
-}
-
-func GetCellPos(pos rl.Vector2, tilesize float64) rl.Vector2 {
-	return rl.NewVector2(float32(math.Floor(float64(pos.X)/tilesize)), float32(math.Floor(float64(pos.Y)/tilesize)))
 }
 
 func (tm *Tilemap) GetFloatingRoofs() []Tile {
@@ -253,7 +215,7 @@ func (tm *Tilemap) GetTiles(tiles []Tile, types []string) []Tile {
 	return res
 }
 
-func loadTilemap(tmd *TileMapData, cropAssets map[string][]rl.Texture2D, tilesize int) Tilemap {
+func LoadTilemap(tmd *TileMapData, cropAssets map[string][]rl.Texture2D, tilesize int) Tilemap {
 	var img = rl.LoadImage("./resources/map/tilesets.png")
 	defer rl.UnloadImage(img)
 	scale := tilesize / tmd.TileWidth
@@ -326,132 +288,25 @@ func loadTilemap(tmd *TileMapData, cropAssets map[string][]rl.Texture2D, tilesiz
 	return tm
 }
 
-func computeCellRange(start float64, end float64, tilesize float64) (int, int) {
-	var sc = math.Floor(start / tilesize)
-	var startC = int(sc)
-	if sc < 0 {
-		startC -= 1
-	}
-	var ec = math.Floor(end / tilesize)
-	var endC = int(ec) + 1
-	if ec < 0 {
-		endC -= 1
-	}
-	return startC, endC
-}
-
-type AnimStyle = struct {
-	Variants   map[string]rl.Texture2D
-	Base       rl.Texture2D
-	StripCount int
-}
-type AnimStyles = map[string]AnimStyle
-
-func NewAnimStyles(dir string) AnimStyles {
-	styles := AnimStyles{}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		log.Fatal(err)
-	}
-	r := regexp.MustCompile(`[a-z](\d+)\.png`)
-
-	supportedStyles := []string{"IDLE", "WALKING", "WATERING", "DIG", "AXE"}
-
-	for _, e := range entries {
-		if !slices.Contains(supportedStyles, e.Name()) {
-			continue
-		}
-		var style = AnimStyle{
-			Variants:   map[string]rl.Texture2D{},
-			StripCount: 0,
-		}
-		fullpath := path.Join(dir, e.Name())
-		files, err := os.ReadDir(fullpath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		for _, f := range files {
-			variantName := strings.Split(f.Name(), "_")[0]
-			s := r.FindStringSubmatch(f.Name())[1]
-			strip, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				log.Fatal(err)
-			}
-			style.StripCount = int(strip)
-
-			imgPath := path.Join(fullpath, f.Name())
-			if variantName == "base" {
-				style.Base = rl.LoadTexture(imgPath)
-			} else {
-				style.Variants[variantName] = rl.LoadTexture(imgPath)
-			}
-		}
-		styles[e.Name()] = style
-	}
-	return styles
-}
-
-func FlipTextureHorizontal(tex rl.Texture2D) rl.Texture2D {
-	baseImg := rl.LoadImageFromTexture(tex)
-	defer rl.UnloadImage(baseImg)
-	rl.ImageFlipHorizontal(baseImg)
-	return rl.LoadTextureFromImage(baseImg)
-}
-
-func UnloadAnimStyles(s AnimStyles) {
-	for _, style := range s {
-		rl.UnloadTexture(style.Base)
-		for _, variant := range style.Variants {
-			rl.UnloadTexture(variant)
-		}
-	}
-}
-
-type Animation struct {
-	AssetSize    rl.Vector2
-	Image        rl.Texture2D
-	ImageFlipped rl.Texture2D
-	X            float32
-	Speed        float32
-	StripCount   float32
-}
-
-func (a *Animation) Update(dt float32) {
-	a.X += dt * a.Speed
-	if a.X >= a.StripCount {
-		a.X = 0
-	}
-}
-func (a *Animation) Reset() {
-	a.X = 0
-}
-
-func (a Animation) SrcRect() rl.Rectangle {
-	x := float32(math.Floor(float64(a.X)))
-	return rl.NewRectangle(x*a.AssetSize.X, 0, a.AssetSize.X, a.AssetSize.Y)
-}
-
 type Player struct {
 	Pos               rl.Vector2
 	HitAreaOffset     rl.Rectangle
 	AssetSize         rl.Vector2
 	TileSize          int
 	Size              rl.Vector2
-	AnimStyles        AnimStyles
-	AnimStylesFlipped AnimStyles
+	AnimStyles        anim.AnimStyles
+	AnimStylesFlipped anim.AnimStyles
 	AnimState         string
-	BaseAnimations    map[string]Animation
-	ToolAnimations    map[string]Animation
-	StyleAnimations   map[string]Animation
+	BaseAnimations    map[string]anim.Animation
+	ToolAnimations    map[string]anim.Animation
+	StyleAnimations   map[string]anim.Animation
 	Flipped           bool
 	Tool              string
 	Tools             []string
 	ToolCounter       float32
 }
 
-func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, animStylesFlipped AnimStyles, tools []string, style string) Player {
+func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles anim.AnimStyles, animStylesFlipped anim.AnimStyles, tools []string, style string) Player {
 	playerImg := animStyles["IDLE"].Base
 	stripCount := animStyles["IDLE"].StripCount
 
@@ -462,46 +317,38 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles AnimStyles, a
 
 	hitRect := rl.NewRectangle(size.X/2-hitboxSize/2, size.Y/2-hitboxSize/2, hitboxSize, hitboxSize)
 
-	baseAnimations := map[string]Animation{}
-	toolAnimations := map[string]Animation{}
-	styleAnimations := map[string]Animation{}
+	baseAnimations := map[string]anim.Animation{}
+	toolAnimations := map[string]anim.Animation{}
+	styleAnimations := map[string]anim.Animation{}
 	animSpeed := 12
-	for anim, animStyle := range animStyles {
-		baseAnimations[anim] = Animation{
+	for a, animStyle := range animStyles {
+		baseAnimations[a] = anim.Animation{
 			Image:        animStyle.Base,
 			AssetSize:    assetSize,
 			X:            0,
 			Speed:        float32(animSpeed),
 			StripCount:   float32(animStyle.StripCount),
-			ImageFlipped: animStylesFlipped[anim].Base,
+			ImageFlipped: animStylesFlipped[a].Base,
 		}
 
-		baseAnimations[anim] = Animation{
-			Image:        animStyle.Base,
-			AssetSize:    assetSize,
-			X:            0,
-			Speed:        float32(animSpeed),
-			StripCount:   float32(animStyle.StripCount),
-			ImageFlipped: animStylesFlipped[anim].Base,
-		}
 		if _, ok := animStyle.Variants[style]; ok {
-			styleAnimations[anim] = Animation{
+			styleAnimations[a] = anim.Animation{
 				Image:        animStyle.Variants[style],
 				AssetSize:    assetSize,
 				X:            0,
 				Speed:        float32(animSpeed),
 				StripCount:   float32(animStyle.StripCount),
-				ImageFlipped: animStylesFlipped[anim].Variants[style],
+				ImageFlipped: animStylesFlipped[a].Variants[style],
 			}
 		}
 		if _, ok := animStyle.Variants["tools"]; ok {
-			toolAnimations[anim] = Animation{
+			toolAnimations[a] = anim.Animation{
 				Image:        animStyle.Variants["tools"],
 				AssetSize:    assetSize,
 				X:            0,
 				Speed:        float32(animSpeed),
 				StripCount:   float32(animStyle.StripCount),
-				ImageFlipped: animStylesFlipped[anim].Variants["tools"],
+				ImageFlipped: animStylesFlipped[a].Variants["tools"],
 			}
 		}
 	}
@@ -755,14 +602,14 @@ func main() {
 		log.Fatal(err)
 	}
 	tmd, _ := parseMap("./resources/map/0.tmj")
-	tm := loadTilemap(&tmd, cropAssets, 48)
+	tm := LoadTilemap(&tmd, cropAssets, 48)
 	defer tm.Unload()
 
-	humanAnimStyles := NewAnimStyles("./resources/characters/Human")
-	defer UnloadAnimStyles(humanAnimStyles)
-	humanAnimStylesFlipped := NewAnimStyles("./resources/characters_flipped/Human")
-	defer UnloadAnimStyles(humanAnimStylesFlipped)
-	// TODO render initial soil when dig
+	supportedStyles := []string{"IDLE", "WALKING", "WATERING", "DIG", "AXE"}
+	humanAnimStyles := anim.NewAnimStyles("./resources/characters/Human", supportedStyles)
+	defer anim.UnloadAnimStyles(humanAnimStyles)
+	humanAnimStylesFlipped := anim.NewAnimStyles("./resources/characters_flipped/Human", supportedStyles)
+	defer anim.UnloadAnimStyles(humanAnimStylesFlipped)
 
 	toolUiAssets := LoadToolUIAssets()
 	defer UnloadTextureMap(toolUiAssets)
@@ -849,9 +696,8 @@ func main() {
 					return rl.CheckCollisionCircleRec(hp, 5, r)
 				})
 				if idx != -1 {
-					// TODO add digged tile, dont dig again if digged
 					r := rects[idx]
-					p := GetCellPos(rl.NewVector2(r.X, r.Y), float64(tm.Tilesize))
+					p := world.GetCellPos(rl.NewVector2(r.X, r.Y), float64(tm.Tilesize))
 					if ft, ok := tm.FarmTiles[p]; ok && ft.State == "empty" {
 						player.UseTool()
 					}
