@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -86,6 +87,7 @@ type Tilemap struct {
 	Roofs        []Tile
 	FarmTiles    map[rl.Vector2]FarmTile
 	TileScale    int
+	CropAssets   map[string][]rl.Texture2D
 }
 type FarmTile struct {
 	Pos rl.Vector2
@@ -117,8 +119,17 @@ func (tm *Tilemap) DrawTerrain(offset rl.Vector2, screenSize rl.Vector2) {
 		if ft.State == "digged" {
 
 			cellpos := ft.Pos
-			viewpos := rl.Vector2Subtract(rl.NewVector2(cellpos.X*float32(tm.Tilesize), cellpos.Y*float32(tm.Tilesize)), offset)
-			rl.DrawRectangleV(viewpos, rl.NewVector2(float32(tm.Tilesize), float32(tm.Tilesize)), rl.NewColor(150, 81, 9, 50))
+			tex := tm.CropAssets["soil"][0]
+			tilesize := float32(tm.Tilesize)
+			viewpos := rl.Vector2Subtract(
+				rl.NewVector2(
+					cellpos.X*tilesize+tilesize*0.5-float32(tex.Width)*float32(tm.TileScale)*0.5,
+					cellpos.Y*tilesize+tilesize*0.5-float32(tex.Height)*float32(tm.TileScale)*0.5,
+				),
+				offset,
+			)
+			rl.DrawTextureEx(tex, viewpos, 0, float32(tm.TileScale), rl.White)
+			// rl.DrawRectangleV(viewpos, rl.NewVector2(float32(tm.Tilesize), float32(tm.Tilesize)), rl.NewColor(150, 81, 9, 50))
 		}
 	}
 
@@ -242,7 +253,7 @@ func (tm *Tilemap) GetTiles(tiles []Tile, types []string) []Tile {
 	return res
 }
 
-func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
+func loadTilemap(tmd *TileMapData, cropAssets map[string][]rl.Texture2D, tilesize int) Tilemap {
 	var img = rl.LoadImage("./resources/map/tilesets.png")
 	defer rl.UnloadImage(img)
 	scale := tilesize / tmd.TileWidth
@@ -257,6 +268,8 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 	tm.Objects = []Tile{}
 	tm.FarmTiles = map[rl.Vector2]FarmTile{}
 	tm.TileScale = scale
+	tm.CropAssets = cropAssets
+	fmt.Println(tm.CropAssets)
 
 	var width = tmd.Width
 	sort.SliceStable(tmd.Layers, func(i, j int) bool {
@@ -297,7 +310,6 @@ func loadTilemap(tmd *TileMapData, tilesize int) Tilemap {
 			}
 		}
 	}
-	fmt.Println(tm.FarmTiles)
 	sort.SliceStable(tm.Objects, func(i, j int) bool {
 		return tm.Objects[i].Center(float32(tm.Tilesize)).Y < tm.Objects[j].Center(float32(tm.Tilesize)).Y
 	})
@@ -687,10 +699,45 @@ func LoadToolUIAssets() map[string]rl.Texture2D {
 	res["water"] = rl.LoadTexture("./resources/UI/water.png")
 	return res
 }
-
 func UnloadTextureMap[K comparable](assets map[K]rl.Texture2D) {
 	for _, tex := range assets {
 		rl.UnloadTexture(tex)
+	}
+}
+
+func LoadCropAssets(rootpath string) (map[string][]rl.Texture2D, error) {
+	res := map[string][]rl.Texture2D{}
+	err := filepath.Walk(rootpath, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+		if strings.Contains(info.Name(), "_") {
+			n := strings.Split(info.Name(), "_")[0]
+			fmt.Println(n)
+			if _, ok := res[n]; !ok {
+				res[n] = []rl.Texture2D{}
+			}
+			arr := res[n]
+			texpath := filepath.Join(rootpath, info.Name())
+			fmt.Println(texpath)
+			arr = append(arr, rl.LoadTexture(texpath))
+			res[n] = arr
+		}
+		return nil
+	})
+	if err != nil {
+		return map[string][]rl.Texture2D{}, err
+	}
+
+	return res, nil
+}
+
+func UnloadCropAssets(assetMap map[string][]rl.Texture2D) {
+	for _, ls := range assetMap {
+		for _, t := range ls {
+			rl.UnloadTexture(t)
+		}
+
 	}
 }
 
@@ -702,14 +749,20 @@ func main() {
 	rl.SetTargetFPS(60)
 	originalTilesize := 16
 
+	cropAssets, err := LoadCropAssets("./resources/elements/Crops")
+	defer UnloadCropAssets(cropAssets)
+	if err != nil {
+		log.Fatal(err)
+	}
 	tmd, _ := parseMap("./resources/map/0.tmj")
-	tm := loadTilemap(&tmd, 48)
+	tm := loadTilemap(&tmd, cropAssets, 48)
 	defer tm.Unload()
 
 	humanAnimStyles := NewAnimStyles("./resources/characters/Human")
 	defer UnloadAnimStyles(humanAnimStyles)
 	humanAnimStylesFlipped := NewAnimStyles("./resources/characters_flipped/Human")
 	defer UnloadAnimStyles(humanAnimStylesFlipped)
+	// TODO render initial soil when dig
 
 	toolUiAssets := LoadToolUIAssets()
 	defer UnloadTextureMap(toolUiAssets)

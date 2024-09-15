@@ -13,17 +13,17 @@
         },
         "0.tmj": {
             "scale": 4,
-            "selectedLayer": 20,
+            "selectedLayer": 21,
             "viewCenter": {
-                "x": 656,
-                "y": 176.25
+                "x": 1243.25,
+                "y": 410.5
             }
         },
         "0.tmj#plain-color": {
             "scaleInDock": 1
         },
         "0.tmj#tilesets": {
-            "scaleInDock": 1
+            "scaleInDock": 2
         },
         "tilesets.tsx": {
             "scaleInDock": 1.5,
