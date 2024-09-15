@@ -71,13 +71,13 @@ func (tm *Tilemap) DrawTerrain(offset rl.Vector2, screenSize rl.Vector2) {
 			tilesize := float32(tm.Tilesize)
 			viewpos := rl.Vector2Subtract(
 				rl.NewVector2(
-					cellpos.X*tilesize+tilesize*0.5-float32(tex.Width)*float32(tm.TileScale)*0.5,
-					cellpos.Y*tilesize+tilesize*0.5-float32(tex.Height)*float32(tm.TileScale)*0.5,
+					cellpos.X*tilesize,
+					cellpos.Y*tilesize,
 				),
 				offset,
 			)
-			rl.DrawTextureEx(tex, viewpos, 0, float32(tm.TileScale), rl.White)
-			// rl.DrawRectangleV(viewpos, rl.NewVector2(float32(tm.Tilesize), float32(tm.Tilesize)), rl.NewColor(150, 81, 9, 50))
+			DrawTextureCenterV(tex, viewpos, tilesize, float32(tm.TileScale))
+			// rl.DrawTextureEx(tex, viewpos, 0, float32(tm.TileScale), rl.White)
 		}
 	}
 
@@ -509,16 +509,17 @@ func LoadCropAssets(rootpath string) (map[string][]rl.Texture2D, error) {
 			return nil
 		}
 		if strings.Contains(info.Name(), "_") {
-			n := strings.Split(info.Name(), "_")[0]
-			fmt.Println(n)
-			if _, ok := res[n]; !ok {
-				res[n] = []rl.Texture2D{}
+			if tokens := strings.Split(info.Name(), "_"); strings.HasPrefix(tokens[1], "0") {
+				n := tokens[0]
+				if _, ok := res[n]; !ok {
+					res[n] = []rl.Texture2D{}
+				}
+				arr := res[n]
+				texpath := filepath.Join(rootpath, info.Name())
+				fmt.Println(texpath)
+				arr = append(arr, rl.LoadTexture(texpath))
+				res[n] = arr
 			}
-			arr := res[n]
-			texpath := filepath.Join(rootpath, info.Name())
-			fmt.Println(texpath)
-			arr = append(arr, rl.LoadTexture(texpath))
-			res[n] = arr
 		}
 		return nil
 	})
@@ -548,6 +549,16 @@ func main() {
 
 	cropAssets, err := LoadCropAssets("./resources/elements/Crops")
 	defer UnloadCropAssets(cropAssets)
+
+	seeds := []string{}
+	for s := range cropAssets {
+		if s != "soil" {
+			seeds = append(seeds, s)
+		}
+	}
+	slices.Sort(seeds)
+	currentSeed := seeds[0]
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -654,6 +665,12 @@ func main() {
 				}
 			}
 		}
+		if rl.IsKeyPressed(rl.KeyD) {
+			if idx := slices.Index(seeds, currentSeed); idx != -1 {
+				idx = (idx + 1) % len(seeds)
+				currentSeed = seeds[idx]
+			}
+		}
 
 		camScrollDest := rl.NewVector2(player.Pos.X-WIDTH/2, player.Pos.Y-HEIGHT/2)
 		dCamScroll := rl.NewVector2((camScrollDest.X-camScroll.X)*2, (camScrollDest.Y-camScroll.Y)*2)
@@ -680,7 +697,24 @@ func main() {
 		tm.DrawRoof(camScroll)
 
 		// draw ui
-		rl.DrawTextureEx(toolUiAssets[player.Tool], rl.NewVector2(float32(tm.Tilesize), float32(HEIGHT-60)), 0, float32(tm.TileScale), rl.White)
+		cropTex := cropAssets[currentSeed][len(cropAssets[currentSeed])-1]
+		DrawTextureCenterV(cropTex, rl.NewVector2(float32(tm.Tilesize)*0.5, HEIGHT-80), float32(tm.Tilesize), float32(tm.TileScale))
+		toolTex := toolUiAssets[player.Tool]
+		DrawTextureCenterV(toolTex, rl.NewVector2(float32(tm.Tilesize)*2, HEIGHT-80), float32(tm.Tilesize), float32(tm.TileScale))
 		rl.EndDrawing()
 	}
+}
+
+func DrawTextureCenterV(tex rl.Texture2D, pos rl.Vector2, tilesize float32, tilescale float32) {
+	rl.DrawTextureEx(
+		tex,
+		rl.NewVector2(
+			pos.X+tilesize*0.5-float32(tex.Width)*tilescale*0.5,
+			pos.Y+tilesize*0.5-float32(tex.Height)*tilescale*0.5,
+		),
+		0,
+		tilescale,
+		rl.White,
+	)
+
 }
