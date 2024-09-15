@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,57 +11,9 @@ import (
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/theanzy/farmsim/internal/anim"
+	"github.com/theanzy/farmsim/internal/tileset"
 	"github.com/theanzy/farmsim/internal/world"
 )
-
-type LayerDataProperty struct {
-	Name  string `json:"name"`
-	Value int    `json:"value"`
-}
-
-type LayerData = struct {
-	Data       []float64 `json:"data"`
-	Name       string    `json:"name"`
-	Visible    bool      `json:"visible"`
-	Properties []LayerDataProperty
-}
-
-func LayerGetProp(ld LayerData, name string) int {
-	for _, p := range ld.Properties {
-		if p.Name == name {
-			return p.Value
-		}
-
-	}
-	return -1
-}
-
-type TileMapData = struct {
-	TileWidth  int         `json:"tilewidth"`
-	TileHeight int         `json:"tileheight"`
-	Width      int         `json:"width"`
-	Height     int         `json:"height"`
-	Layers     []LayerData `json:"layers"`
-}
-
-func parseMap(filepath string) (TileMapData, error) {
-	jsonFile, err := os.Open(filepath)
-	if err != nil {
-		return TileMapData{}, err
-	}
-	defer jsonFile.Close()
-
-	var res TileMapData
-	buffer, err := io.ReadAll(jsonFile)
-	if err != nil {
-		return TileMapData{}, err
-	}
-	err = json.Unmarshal(buffer, &res)
-	if err != nil {
-		return TileMapData{}, err
-	}
-	return res, nil
-}
 
 type Tile struct {
 	Variant int
@@ -215,7 +165,7 @@ func (tm *Tilemap) GetTiles(tiles []Tile, types []string) []Tile {
 	return res
 }
 
-func LoadTilemap(tmd *TileMapData, cropAssets map[string][]rl.Texture2D, tilesize int) Tilemap {
+func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string][]rl.Texture2D, tilesize int) Tilemap {
 	var img = rl.LoadImage("./resources/map/tilesets.png")
 	defer rl.UnloadImage(img)
 	scale := tilesize / tmd.TileWidth
@@ -235,11 +185,11 @@ func LoadTilemap(tmd *TileMapData, cropAssets map[string][]rl.Texture2D, tilesiz
 
 	var width = tmd.Width
 	sort.SliceStable(tmd.Layers, func(i, j int) bool {
-		return LayerGetProp(tmd.Layers[i], "z") < LayerGetProp(tmd.Layers[j], "z")
+		return tileset.LayerGetProp(tmd.Layers[i], "z") < tileset.LayerGetProp(tmd.Layers[j], "z")
 	})
 
 	for _, layer := range tmd.Layers {
-		z := LayerGetProp(layer, "z")
+		z := tileset.LayerGetProp(layer, "z")
 		tiles := map[rl.Vector2]Tile{}
 		for i, id := range layer.Data {
 			x := i % width
@@ -601,7 +551,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	tmd, _ := parseMap("./resources/map/0.tmj")
+	tmd, _ := tileset.ParseMap("./resources/map/0.tmj")
 	tm := LoadTilemap(&tmd, cropAssets, 48)
 	defer tm.Unload()
 
