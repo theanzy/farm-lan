@@ -30,6 +30,7 @@ func (t Tile) Center(tilesize float32) rl.Vector2 {
 type FarmTile struct {
 	Pos rl.Vector2
 	// empty, digged, name of plant
+	IsWet    bool
 	State    string
 	PlantAge int
 }
@@ -87,6 +88,11 @@ func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
 			),
 			offset,
 		)
+		if ft.State == "empty" {
+			if ft.IsWet {
+				rl.DrawRectangleV(viewpos, rl.NewVector2(tilesize, tilesize), rl.NewColor(139, 69, 19, 60))
+			}
+		}
 		if ft.State == "digged" {
 			cellpos := ft.Pos
 			tilesize := float32(tm.Tilesize)
@@ -98,6 +104,9 @@ func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
 				offset,
 			)
 			DrawTilesetId(tm.tilesetAsset, 818, viewpos, tm.tilesetCols, float32(tm.Tilesize))
+			if ft.IsWet {
+				rl.DrawRectangleV(viewpos, rl.NewVector2(tilesize, tilesize), rl.NewColor(139, 69, 19, 60))
+			}
 		} else if ca, ok := tm.CropAssets[ft.State]; ok {
 			soil := tm.CropAssets["soil"]
 			age := ft.PlantAge
@@ -109,6 +118,9 @@ func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
 				0,
 				rl.White,
 			)
+			if ft.IsWet {
+				rl.DrawRectangleV(viewpos, rl.NewVector2(tilesize, tilesize), rl.NewColor(139, 69, 19, 60))
+			}
 			rl.DrawTexturePro(
 				ca.Img,
 				ca.SrcRects[age],
@@ -186,6 +198,14 @@ func (tm *Tilemap) AddFarmHole(pos rl.Vector2) {
 	cellpos := world.GetCellPos(pos, float64(tm.Tilesize))
 	if t, ok := tm.FarmTiles[cellpos]; ok {
 		t.State = "digged"
+		tm.FarmTiles[cellpos] = t
+	}
+}
+
+func (tm *Tilemap) AddWetTile(pos rl.Vector2) {
+	cellpos := world.GetCellPos(pos, float64(tm.Tilesize))
+	if t, ok := tm.FarmTiles[cellpos]; ok {
+		t.IsWet = true
 		tm.FarmTiles[cellpos] = t
 	}
 }
@@ -713,8 +733,8 @@ func main() {
 
 		if rl.IsKeyPressed(rl.KeyS) {
 			player.SwitchTool()
-		} else if rl.IsKeyPressed(rl.KeyC) {
-			if player.Tool == "shovel" && player.ToolCounter == 0 {
+		} else if rl.IsKeyPressed(rl.KeyC) && player.ToolCounter == 0 {
+			if player.Tool == "shovel" {
 				hp := player.ToolHitPoint()
 				rects := tm.GetFarmRectsAround(hp)
 				idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
@@ -726,6 +746,16 @@ func main() {
 					if ft, ok := tm.FarmTiles[p]; ok && ft.State == "empty" {
 						player.UseTool()
 					}
+				}
+			} else if player.Tool == "water" {
+				hp := player.ToolHitPoint()
+				rects := tm.GetFarmRectsAround(hp)
+				idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
+					return rl.CheckCollisionCircleRec(hp, 5, r)
+				})
+				if idx != -1 {
+					player.UseTool()
+					tm.AddWetTile(player.ToolHitPoint())
 				}
 			}
 		}
