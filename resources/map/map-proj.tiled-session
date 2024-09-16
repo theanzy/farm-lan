@@ -12,18 +12,18 @@
             "scaleInDock": 1
         },
         "0.tmj": {
-            "scale": 4,
+            "scale": 2,
             "selectedLayer": 21,
             "viewCenter": {
-                "x": 1243.25,
-                "y": 410.5
+                "x": 799.25,
+                "y": 343.5
             }
         },
         "0.tmj#plain-color": {
             "scaleInDock": 1
         },
         "0.tmj#tilesets": {
-            "scaleInDock": 2
+            "scaleInDock": 3
         },
         "tilesets.tsx": {
             "scaleInDock": 1.5,

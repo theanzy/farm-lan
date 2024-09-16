@@ -1,8 +1,15 @@
 package main
 
 import (
+	"fmt"
+	"io/fs"
+	"log"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/theanzy/farmsim/internal/anim"
@@ -22,7 +29,7 @@ func (t Tile) Center(tilesize float32) rl.Vector2 {
 
 type FarmTile struct {
 	Pos rl.Vector2
-	// empty, digged, planted
+	// empty, digged, name of plant
 	State    string
 	PlantAge int
 }
@@ -39,6 +46,7 @@ type Tilemap struct {
 	Rows         int
 	Roofs        []Tile
 	FarmTiles    map[rl.Vector2]FarmTile
+	CropAssets   map[string]StripImg
 	TileScale    int
 }
 
@@ -70,8 +78,16 @@ func (tm *Tilemap) DrawTerrain(offset rl.Vector2, screenSize rl.Vector2) {
 
 func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
 	for _, ft := range tm.FarmTiles {
+		cellpos := ft.Pos
+		tilesize := float32(tm.Tilesize)
+		viewpos := rl.Vector2Subtract(
+			rl.NewVector2(
+				cellpos.X*tilesize,
+				cellpos.Y*tilesize,
+			),
+			offset,
+		)
 		if ft.State == "digged" {
-
 			cellpos := ft.Pos
 			tilesize := float32(tm.Tilesize)
 			viewpos := rl.Vector2Subtract(
@@ -82,6 +98,26 @@ func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
 				offset,
 			)
 			DrawTilesetId(tm.tilesetAsset, 818, viewpos, tm.tilesetCols, float32(tm.Tilesize))
+		} else if ca, ok := tm.CropAssets[ft.State]; ok {
+			soil := tm.CropAssets["soil"]
+			age := ft.PlantAge
+			rl.DrawTexturePro(
+				soil.Img,
+				soil.SrcRects[age],
+				rl.NewRectangle(viewpos.X, viewpos.Y, tilesize, tilesize),
+				rl.NewVector2(0, 0),
+				0,
+				rl.White,
+			)
+			rl.DrawTexturePro(
+				ca.Img,
+				ca.SrcRects[age],
+				rl.NewRectangle(viewpos.X, viewpos.Y, tilesize, tilesize),
+				rl.NewVector2(0, 0),
+				0,
+				rl.White,
+			)
+
 		}
 	}
 }
@@ -168,7 +204,7 @@ func (tm *Tilemap) GetTiles(tiles []Tile, types []string) []Tile {
 	return res
 }
 
-func LoadTilemap(tmd *tileset.TileMapData, tilesize int) Tilemap {
+func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]StripImg, tilesize int) Tilemap {
 	var img = rl.LoadImage("./resources/map/tilesets.png")
 	defer rl.UnloadImage(img)
 	scale := tilesize / tmd.TileWidth
@@ -186,6 +222,7 @@ func LoadTilemap(tmd *tileset.TileMapData, tilesize int) Tilemap {
 	tm.Objects = []Tile{}
 	tm.FarmTiles = map[rl.Vector2]FarmTile{}
 	tm.TileScale = scale
+	tm.CropAssets = cropAssets
 
 	var width = tmd.Width
 	sort.SliceStable(tmd.Layers, func(i, j int) bool {
@@ -506,6 +543,58 @@ func UnloadTextureMap[K comparable](assets map[K]rl.Texture2D) {
 	}
 }
 
+type StripImg struct {
+	Img        rl.Texture2D
+	StripCount int
+	SrcRects   []rl.Rectangle
+}
+
+func LoadCropAssets(dirpath string, crops []string) (map[string]StripImg, error) {
+	r := regexp.MustCompile(`[a-z](\d+)\.png`)
+
+	res := map[string]StripImg{}
+	err := filepath.Walk(dirpath, func(path string, info fs.FileInfo, err error) error {
+		if filepath.Ext(path) == ".png" {
+			ftokens := strings.Split(info.Name(), "_")
+			cropName := ftokens[0]
+			fmt.Println(cropName)
+			if slices.Contains(crops, cropName) {
+				s := r.FindStringSubmatch(info.Name())[1]
+				strip, err := strconv.ParseInt(s, 10, 64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				stripCount := int(strip)
+				img := rl.LoadTexture(path)
+				rects := []rl.Rectangle{}
+				unitWidth := img.Width / int32(stripCount)
+				for i := range stripCount {
+					rect := rl.NewRectangle(float32(i)*float32(unitWidth), 0, float32(unitWidth), float32(img.Height))
+					rects = append(rects, rect)
+				}
+				res[cropName] = StripImg{
+					Img:        rl.LoadTexture(path),
+					StripCount: stripCount,
+					SrcRects:   rects,
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return map[string]StripImg{}, err
+	}
+	fmt.Println(res)
+
+	return res, nil
+}
+
+func UnloadCropAssets(assets map[string]StripImg) {
+	for _, stripImg := range assets {
+		rl.UnloadTexture(stripImg.Img)
+	}
+}
+
 func main() {
 	const WIDTH = 1280
 	const HEIGHT = 720
@@ -515,20 +604,24 @@ func main() {
 	originalTilesize := 16
 
 	// tileset id
-	// cropAssets, err := LoadCropAssets("./resources/elements/Crops")
-	// defer UnloadCropAssets(cropAssets)
-	const cropTilesetStartId = 691
 	var crops = []string{"carrot", "cauliflower", "pumpkin", "sunflower", "radish", "parsnip", "potato", "cabbage", "beetroot", "wheat", "kale"}
+	cropAssets, err := LoadCropAssets("./resources/elements/Crops", append(crops, "soil"))
+	if err != nil {
+		return
+	}
+	defer UnloadCropAssets(cropAssets)
+
+	tmd, _ := tileset.ParseMap("./resources/map/0.tmj")
+	tm := LoadTilemap(&tmd, cropAssets, 48)
+	defer tm.Unload()
+
+	const cropTilesetStartId = 691
 	getFullCropTileId := func(cropName string) int {
 		idx := slices.Index(crops, cropName)
 		return cropTilesetStartId + idx
 	}
+
 	currentSeed := "carrot"
-
-	tmd, _ := tileset.ParseMap("./resources/map/0.tmj")
-	tm := LoadTilemap(&tmd, 48)
-	defer tm.Unload()
-
 	seedUiPos := rl.NewVector2(
 		float32(tm.Tilesize),
 		HEIGHT-80,
