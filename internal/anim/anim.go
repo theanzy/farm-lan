@@ -13,11 +13,12 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-type AnimStyle = struct {
+type AnimStyle struct {
 	Variants   map[string]rl.Texture2D
 	Base       rl.Texture2D
 	StripCount int
 }
+
 type AnimStyles = map[string]AnimStyle
 
 func NewAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
@@ -37,6 +38,7 @@ func NewAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
 			Variants:   map[string]rl.Texture2D{},
 			StripCount: 0,
 		}
+
 		fullpath := path.Join(dirpath, e.Name())
 		files, err := os.ReadDir(fullpath)
 		if err != nil {
@@ -51,12 +53,12 @@ func NewAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
 				log.Fatal(err)
 			}
 			style.StripCount = int(strip)
-
 			imgPath := path.Join(fullpath, f.Name())
+			img := rl.LoadTexture(imgPath)
 			if variantName == "base" {
-				style.Base = rl.LoadTexture(imgPath)
+				style.Base = img
 			} else {
-				style.Variants[variantName] = rl.LoadTexture(imgPath)
+				style.Variants[variantName] = img
 			}
 		}
 		styles[e.Name()] = style
@@ -74,12 +76,13 @@ func UnloadAnimStyles(s AnimStyles) {
 }
 
 type Animation struct {
-	AssetSize    rl.Vector2
-	Image        rl.Texture2D
-	ImageFlipped rl.Texture2D
-	X            float32
-	Speed        float32
-	StripCount   float32
+	AssetSize      rl.Vector2
+	Image          rl.Texture2D
+	X              float32
+	Speed          float32
+	StripCount     float32
+	SrcRects       []rl.Rectangle
+	SrcRectFlipped []rl.Rectangle
 }
 
 func (a *Animation) Update(dt float32) {
@@ -92,7 +95,11 @@ func (a *Animation) Reset() {
 	a.X = 0
 }
 
-func (a Animation) SrcRect() rl.Rectangle {
-	x := float32(math.Floor(float64(a.X)))
-	return rl.NewRectangle(x*a.AssetSize.X, 0, a.AssetSize.X, a.AssetSize.Y)
+func (a Animation) SrcRect(flipped bool) rl.Rectangle {
+	x := int(math.Floor(float64(a.X)))
+
+	if flipped {
+		return a.SrcRectFlipped[x]
+	}
+	return a.SrcRects[x]
 }

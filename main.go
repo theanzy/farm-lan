@@ -280,28 +280,37 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]StripImg, tiles
 }
 
 type Player struct {
-	Pos               rl.Vector2
-	HitAreaOffset     rl.Rectangle
-	AssetSize         rl.Vector2
-	TileSize          int
-	Size              rl.Vector2
-	AnimStyles        anim.AnimStyles
-	AnimStylesFlipped anim.AnimStyles
-	AnimState         string
-	BaseAnimations    map[string]anim.Animation
-	ToolAnimations    map[string]anim.Animation
-	StyleAnimations   map[string]anim.Animation
-	Flipped           bool
-	Tool              string
-	Tools             []string
-	ToolCounter       float32
+	Pos             rl.Vector2
+	HitAreaOffset   rl.Rectangle
+	AssetSize       rl.Vector2
+	TileSize        int
+	Size            rl.Vector2
+	AnimStyles      anim.AnimStyles
+	AnimState       string
+	BaseAnimations  map[string]anim.Animation
+	ToolAnimations  map[string]anim.Animation
+	StyleAnimations map[string]anim.Animation
+	Flipped         bool
+	Tool            string
+	Tools           []string
+	ToolCounter     float32
 }
 
-func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles anim.AnimStyles, animStylesFlipped anim.AnimStyles, tools []string, style string) Player {
+func GetSrcRects(stripCount int, imgSize rl.Vector2) ([]rl.Rectangle, []rl.Rectangle) {
+	original := []rl.Rectangle{}
+	flipped := []rl.Rectangle{}
+	for i := range stripCount {
+		original = append(original, rl.NewRectangle(float32(i)*imgSize.X, 0, imgSize.X, imgSize.Y))
+		flipped = append(flipped, rl.NewRectangle(float32(i)*imgSize.X, imgSize.Y, imgSize.X, imgSize.Y))
+	}
+	return original, flipped
+}
+
+func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles anim.AnimStyles, tools []string, style string) Player {
 	playerImg := animStyles["IDLE"].Base
 	stripCount := animStyles["IDLE"].StripCount
 
-	assetSize := rl.NewVector2(float32(playerImg.Width)/float32(stripCount), float32(playerImg.Height))
+	assetSize := rl.NewVector2(float32(playerImg.Width)/float32(stripCount), float32(playerImg.Height)/2)
 	size := rl.NewVector2(float32(assetSize.X)*float32(scale), float32(assetSize.Y)*float32(scale))
 
 	hitboxSize := assetSize.X * 0.4
@@ -313,53 +322,58 @@ func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles anim.AnimStyl
 	styleAnimations := map[string]anim.Animation{}
 	animSpeed := 12
 	for a, animStyle := range animStyles {
+		baseSrcRects, baseSrcRectsFlipped := GetSrcRects(animStyle.StripCount, assetSize)
 		baseAnimations[a] = anim.Animation{
-			Image:        animStyle.Base,
-			AssetSize:    assetSize,
-			X:            0,
-			Speed:        float32(animSpeed),
-			StripCount:   float32(animStyle.StripCount),
-			ImageFlipped: animStylesFlipped[a].Base,
+			Image:          animStyle.Base,
+			AssetSize:      assetSize,
+			X:              0,
+			Speed:          float32(animSpeed),
+			StripCount:     float32(animStyle.StripCount),
+			SrcRects:       baseSrcRects,
+			SrcRectFlipped: baseSrcRectsFlipped,
 		}
 
-		if _, ok := animStyle.Variants[style]; ok {
+		if v, ok := animStyle.Variants[style]; ok {
+			srcRects, srcRectsFlipped := GetSrcRects(animStyle.StripCount, assetSize)
 			styleAnimations[a] = anim.Animation{
-				Image:        animStyle.Variants[style],
-				AssetSize:    assetSize,
-				X:            0,
-				Speed:        float32(animSpeed),
-				StripCount:   float32(animStyle.StripCount),
-				ImageFlipped: animStylesFlipped[a].Variants[style],
+				Image:          v,
+				AssetSize:      assetSize,
+				X:              0,
+				Speed:          float32(animSpeed),
+				StripCount:     float32(animStyle.StripCount),
+				SrcRects:       srcRects,
+				SrcRectFlipped: srcRectsFlipped,
 			}
 		}
-		if _, ok := animStyle.Variants["tools"]; ok {
+		if v, ok := animStyle.Variants["tools"]; ok {
+			srcRects, srcRectsFlipped := GetSrcRects(animStyle.StripCount, assetSize)
 			toolAnimations[a] = anim.Animation{
-				Image:        animStyle.Variants["tools"],
-				AssetSize:    assetSize,
-				X:            0,
-				Speed:        float32(animSpeed),
-				StripCount:   float32(animStyle.StripCount),
-				ImageFlipped: animStylesFlipped[a].Variants["tools"],
+				Image:          v,
+				AssetSize:      assetSize,
+				X:              0,
+				Speed:          float32(animSpeed),
+				StripCount:     float32(animStyle.StripCount),
+				SrcRects:       srcRects,
+				SrcRectFlipped: srcRectsFlipped,
 			}
 		}
 	}
 
 	return Player{
-		Pos:               pos,
-		HitAreaOffset:     hitRect,
-		AssetSize:         assetSize,
-		Size:              size,
-		TileSize:          tilesize,
-		AnimStyles:        animStyles,
-		AnimStylesFlipped: animStylesFlipped,
-		AnimState:         "IDLE",
-		BaseAnimations:    baseAnimations,
-		ToolAnimations:    toolAnimations,
-		StyleAnimations:   styleAnimations,
-		Flipped:           false,
-		Tool:              "water",
-		Tools:             tools,
-		ToolCounter:       0,
+		Pos:             pos,
+		HitAreaOffset:   hitRect,
+		AssetSize:       assetSize,
+		Size:            size,
+		TileSize:        tilesize,
+		AnimStyles:      animStyles,
+		AnimState:       "IDLE",
+		BaseAnimations:  baseAnimations,
+		ToolAnimations:  toolAnimations,
+		StyleAnimations: styleAnimations,
+		Flipped:         false,
+		Tool:            "water",
+		Tools:           tools,
+		ToolCounter:     0,
 	}
 }
 
@@ -476,16 +490,11 @@ func (p Player) Draw(offset rl.Vector2) {
 	// base
 	baseAnim := p.BaseAnimations[p.AnimState]
 	baseImg := baseAnim.Image
-	if p.Flipped {
-		baseImg = baseAnim.ImageFlipped
-	}
-	rl.DrawTexturePro(baseImg, baseAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+
+	rl.DrawTexturePro(baseImg, baseAnim.SrcRect(p.Flipped), destRect, rl.NewVector2(0, 0), 0, rl.White)
 	styleAnim := p.StyleAnimations[p.AnimState]
 	styleImg := styleAnim.Image
-	if p.Flipped {
-		styleImg = styleAnim.ImageFlipped
-	}
-	rl.DrawTexturePro(styleImg, styleAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+	rl.DrawTexturePro(styleImg, styleAnim.SrcRect(p.Flipped), destRect, rl.NewVector2(0, 0), 0, rl.White)
 	if p.ToolCounter == 0 {
 		p.DrawTool(offset)
 	}
@@ -505,10 +514,7 @@ func (p Player) DrawTool(offset rl.Vector2) {
 	destRect := rl.NewRectangle(p.Pos.X-offset.X, p.Pos.Y-offset.Y, p.Size.X, p.Size.Y)
 	if toolAnim, ok := p.ToolAnimations[p.AnimState]; ok {
 		img := toolAnim.Image
-		if p.Flipped {
-			img = toolAnim.ImageFlipped
-		}
-		rl.DrawTexturePro(img, toolAnim.SrcRect(), destRect, rl.NewVector2(0, 0), 0, rl.White)
+		rl.DrawTexturePro(img, toolAnim.SrcRect(p.Flipped), destRect, rl.NewVector2(0, 0), 0, rl.White)
 	}
 }
 
@@ -630,8 +636,6 @@ func main() {
 	supportedStyles := []string{"IDLE", "WALKING", "WATERING", "DIG", "AXE"}
 	humanAnimStyles := anim.NewAnimStyles("./resources/characters/Human", supportedStyles)
 	defer anim.UnloadAnimStyles(humanAnimStyles)
-	humanAnimStylesFlipped := anim.NewAnimStyles("./resources/characters_flipped/Human", supportedStyles)
-	defer anim.UnloadAnimStyles(humanAnimStylesFlipped)
 
 	toolUiAssets := LoadToolUIAssets()
 	defer UnloadTextureMap(toolUiAssets)
@@ -650,7 +654,6 @@ func main() {
 		tm.Tilesize,
 		tm.Tilesize/originalTilesize,
 		humanAnimStyles,
-		humanAnimStylesFlipped,
 		tools,
 		"shorthair",
 	)
