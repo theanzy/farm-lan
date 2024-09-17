@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/fs"
 	"path/filepath"
 	"regexp"
@@ -23,7 +22,7 @@ type Tile struct {
 }
 
 func (t Tile) Center(tilesize float32) rl.Vector2 {
-	return rl.NewVector2(t.Pos.X+tilesize, t.Pos.Y)
+	return rl.NewVector2(t.Pos.X*tilesize+tilesize*0.5, t.Pos.Y*tilesize+0.5)
 }
 
 type FarmTile struct {
@@ -517,6 +516,7 @@ func (p Player) Draw(offset rl.Vector2) {
 	if p.ToolCounter == 0 {
 		p.DrawTool(offset)
 	}
+	rl.DrawCircleV(rl.Vector2Subtract(p.Center(), offset), 10, rl.Red)
 }
 
 func (p *Player) ToolHitPoint() rl.Vector2 {
@@ -548,7 +548,7 @@ type Sprite struct {
 
 func DrawDepth(offset rl.Vector2, sprites []Sprite, drawRoof bool) {
 	slices.SortStableFunc(sprites, func(a Sprite, b Sprite) int {
-		return int(b.Center().Y - a.Center().Y)
+		return int(a.Center().Y - b.Center().Y)
 	})
 	for _, sprite := range sprites {
 		sprite.Draw(offset, drawRoof)
@@ -608,7 +608,6 @@ func LoadCropAssets(dirpath string, crops []string) (map[string]StripImg, error)
 	if err != nil {
 		return map[string]StripImg{}, err
 	}
-	fmt.Println(res)
 
 	return res, nil
 }
@@ -685,6 +684,10 @@ func main() {
 					tm.DrawTile(t, offset)
 				},
 				Center: func() rl.Vector2 {
+					if t.Type == "house_decor" {
+						c := t.Center(float32(tm.Tilesize))
+						return rl.NewVector2(c.X, c.Y-float32(tm.Tilesize)*2)
+					}
 					return t.Center(float32(tm.Tilesize))
 				},
 			})
@@ -695,7 +698,9 @@ func main() {
 		Draw: func(offset rl.Vector2, drawRoof bool) {
 			player.Draw(offset)
 		},
-		Center: player.Center,
+		Center: func() rl.Vector2 {
+			return rl.NewVector2(player.Center().X, player.Pos.Y+float32(tm.Tilesize)*0.5)
+		},
 	})
 
 	var camScroll = rl.NewVector2(0, 0)
@@ -794,15 +799,31 @@ func main() {
 			tm.DrawTile(t, camScroll)
 		}
 
-		for _, t := range tm.GetFloatingRoofs() {
-			tm.DrawTile(t, camScroll)
+		idx := slices.IndexFunc(tm.TileLayers, func(l map[rl.Vector2]Tile) bool {
+			for _, t := range l {
+				if t.Type != "house_floor" {
+					return false
+				}
+				return true
+			}
+			return false
+		})
+		_, inHouse := tm.TileLayers[idx][world.GetCellPos(player.Center(), float64(tm.Tilesize))]
+
+		if !inHouse {
+			for _, t := range tm.GetFloatingRoofs() {
+				tm.DrawTile(t, camScroll)
+			}
 		}
+
 		DrawDepth(camScroll, depthSprites, true)
 		if player.ToolCounter > 0 {
 			player.DrawTool(camScroll)
 		}
 
-		tm.DrawRoof(camScroll)
+		if !inHouse {
+			tm.DrawRoof(camScroll)
+		}
 
 		// draw ui
 		DrawTilesetId(tm.tilesetAsset, getFullCropTileId(currentSeed), seedUiPos, tm.tilesetCols, float32(tm.Tilesize))
