@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io/fs"
-	"log"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -583,12 +582,11 @@ func LoadCropAssets(dirpath string, crops []string) (map[string]StripImg, error)
 		if filepath.Ext(path) == ".png" {
 			ftokens := strings.Split(info.Name(), "_")
 			cropName := ftokens[0]
-			fmt.Println(cropName)
 			if slices.Contains(crops, cropName) {
 				s := r.FindStringSubmatch(info.Name())[1]
 				strip, err := strconv.ParseInt(s, 10, 64)
 				if err != nil {
-					log.Fatal(err)
+					return err
 				}
 				stripCount := int(strip)
 				img := rl.LoadTexture(path)
@@ -763,6 +761,20 @@ func main() {
 			if idx := slices.Index(crops, currentSeed); idx != -1 {
 				idx = (idx + 1) % len(crops)
 				currentSeed = crops[idx]
+			}
+		}
+		if rl.IsKeyPressed(rl.KeyX) {
+			hp := player.ToolHitPoint()
+			rects := tm.GetFarmRectsAround(hp)
+			idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
+				return rl.CheckCollisionCircleRec(hp, 5, r)
+			})
+			if idx != -1 {
+				cp := world.GetCellPos(rl.NewVector2(rects[idx].X, rects[idx].Y), float64(tm.Tilesize))
+				if ft, ok := tm.FarmTiles[cp]; ok && ft.State == "digged" {
+					ft.State = currentSeed
+					tm.FarmTiles[cp] = ft
+				}
 			}
 		}
 
