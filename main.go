@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
+	"math"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -37,6 +39,7 @@ type Tilemap struct {
 	TileLayers   []map[rl.Vector2]Tile
 	Objects      []Tile
 	Obstacles    map[rl.Vector2]bool
+	Beds         map[rl.Vector2]bool
 	tilesetAsset rl.Texture2D
 	Tilesize     int
 	tilesetCols  int
@@ -241,6 +244,7 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]StripImg, tiles
 	tm.FarmTiles = map[rl.Vector2]FarmTile{}
 	tm.TileScale = scale
 	tm.CropAssets = cropAssets
+	tm.Beds = map[rl.Vector2]bool{}
 
 	var width = tmd.Width
 	sort.SliceStable(tmd.Layers, func(i, j int) bool {
@@ -257,6 +261,9 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]StripImg, tiles
 			if layer.Name == "obstacles" && id > 0 {
 				tm.Obstacles[cellpos] = true
 				continue
+			}
+			if layer.Name == "bed" && id > 0 {
+				tm.Beds[cellpos] = true
 			}
 			if layer.Name == "farm_tile" && id > 0 {
 				tm.FarmTiles[cellpos] = FarmTile{
@@ -516,7 +523,6 @@ func (p Player) Draw(offset rl.Vector2) {
 	if p.ToolCounter == 0 {
 		p.DrawTool(offset)
 	}
-	rl.DrawCircleV(rl.Vector2Subtract(p.Center(), offset), 10, rl.Red)
 }
 
 func (p *Player) ToolHitPoint() rl.Vector2 {
@@ -704,84 +710,110 @@ func main() {
 	})
 
 	var camScroll = rl.NewVector2(0, 0)
+	transitionCounter := 0.0
 	for !rl.WindowShouldClose() {
 		playerMoveX := []float32{0, 0}
 		playerMoveY := []float32{0, 0}
 		dt := rl.GetFrameTime()
-		if rl.IsKeyDown(rl.KeyUp) {
-			playerMoveY[0] = 1
-		}
-		if rl.IsKeyDown(rl.KeyDown) {
-			playerMoveY[1] = 1
-		}
-		if rl.IsKeyDown(rl.KeyLeft) {
-			playerMoveX[0] = 1
-		}
-		if rl.IsKeyDown(rl.KeyRight) {
-			playerMoveX[1] = 1
-		}
+		if transitionCounter == 0 {
 
-		if rl.IsKeyUp(rl.KeyUp) {
-			playerMoveY[0] = 0
-		}
-		if rl.IsKeyUp(rl.KeyDown) {
-			playerMoveY[1] = 0
-		}
-		if rl.IsKeyUp(rl.KeyLeft) {
-			playerMoveX[0] = 0
-		}
-		if rl.IsKeyUp(rl.KeyRight) {
-			playerMoveX[1] = 0
-		}
+			if rl.IsKeyDown(rl.KeyUp) {
+				playerMoveY[0] = 1
+			}
+			if rl.IsKeyDown(rl.KeyDown) {
+				playerMoveY[1] = 1
+			}
+			if rl.IsKeyDown(rl.KeyLeft) {
+				playerMoveX[0] = 1
+			}
+			if rl.IsKeyDown(rl.KeyRight) {
+				playerMoveX[1] = 1
+			}
 
-		if rl.IsKeyPressed(rl.KeyS) {
-			player.SwitchTool()
-		} else if rl.IsKeyPressed(rl.KeyC) && player.ToolCounter == 0 {
-			if player.Tool == "shovel" {
-				hp := player.ToolHitPoint()
-				rects := tm.GetFarmRectsAround(hp)
-				idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
-					return rl.CheckCollisionCircleRec(hp, 5, r)
-				})
-				if idx != -1 {
-					r := rects[idx]
-					p := world.GetCellPos(rl.NewVector2(r.X, r.Y), float64(tm.Tilesize))
-					if ft, ok := tm.FarmTiles[p]; ok && ft.State == "empty" {
+			if rl.IsKeyUp(rl.KeyUp) {
+				playerMoveY[0] = 0
+			}
+			if rl.IsKeyUp(rl.KeyDown) {
+				playerMoveY[1] = 0
+			}
+			if rl.IsKeyUp(rl.KeyLeft) {
+				playerMoveX[0] = 0
+			}
+			if rl.IsKeyUp(rl.KeyRight) {
+				playerMoveX[1] = 0
+			}
+
+			if rl.IsKeyPressed(rl.KeyS) {
+				player.SwitchTool()
+			} else if rl.IsKeyPressed(rl.KeyC) && player.ToolCounter == 0 {
+				if player.Tool == "shovel" {
+					hp := player.ToolHitPoint()
+					rects := tm.GetFarmRectsAround(hp)
+					idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
+						return rl.CheckCollisionCircleRec(hp, 5, r)
+					})
+					if idx != -1 {
+						r := rects[idx]
+						p := world.GetCellPos(rl.NewVector2(r.X, r.Y), float64(tm.Tilesize))
+						if ft, ok := tm.FarmTiles[p]; ok && ft.State == "empty" {
+							player.UseTool()
+						}
+					}
+				} else if player.Tool == "water" {
+					hp := player.ToolHitPoint()
+					rects := tm.GetFarmRectsAround(hp)
+					idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
+						return rl.CheckCollisionCircleRec(hp, 5, r)
+					})
+					if idx != -1 {
 						player.UseTool()
+						tm.AddWetTile(player.ToolHitPoint())
 					}
 				}
-			} else if player.Tool == "water" {
+			}
+			if rl.IsKeyPressed(rl.KeyD) {
+				if idx := slices.Index(crops, currentSeed); idx != -1 {
+					idx = (idx + 1) % len(crops)
+					currentSeed = crops[idx]
+				}
+			}
+			if rl.IsKeyPressed(rl.KeyX) {
 				hp := player.ToolHitPoint()
 				rects := tm.GetFarmRectsAround(hp)
 				idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
 					return rl.CheckCollisionCircleRec(hp, 5, r)
 				})
 				if idx != -1 {
-					player.UseTool()
-					tm.AddWetTile(player.ToolHitPoint())
+					cp := world.GetCellPos(rl.NewVector2(rects[idx].X, rects[idx].Y), float64(tm.Tilesize))
+					if ft, ok := tm.FarmTiles[cp]; ok && ft.State == "digged" {
+						ft.State = currentSeed
+						tm.FarmTiles[cp] = ft
+					}
 				}
 			}
-		}
-		if rl.IsKeyPressed(rl.KeyD) {
-			if idx := slices.Index(crops, currentSeed); idx != -1 {
-				idx = (idx + 1) % len(crops)
-				currentSeed = crops[idx]
-			}
-		}
-		if rl.IsKeyPressed(rl.KeyX) {
-			hp := player.ToolHitPoint()
-			rects := tm.GetFarmRectsAround(hp)
-			idx := slices.IndexFunc(rects, func(r rl.Rectangle) bool {
-				return rl.CheckCollisionCircleRec(hp, 5, r)
-			})
-			if idx != -1 {
-				cp := world.GetCellPos(rl.NewVector2(rects[idx].X, rects[idx].Y), float64(tm.Tilesize))
-				if ft, ok := tm.FarmTiles[cp]; ok && ft.State == "digged" {
-					ft.State = currentSeed
-					tm.FarmTiles[cp] = ft
+			if rl.IsKeyPressed(rl.KeySpace) {
+				hp := player.ToolHitPoint()
+				chp := world.GetCellPos(hp, float64(tm.Tilesize))
+				if _, ok := tm.Beds[chp]; ok {
+
+					fmt.Println("sleep")
+					// start transition. block all inputs
+					transitionCounter = 512
+					// add plant age if soil is wet, reset soil to dry
+					for p, ft := range tm.FarmTiles {
+						if ft.IsWet {
+							ft.PlantAge = ft.PlantAge + 1
+						}
+						ft.IsWet = false
+						tm.FarmTiles[p] = ft
+						// TODO add days
+					}
 				}
+
 			}
 		}
+
+		transitionCounter = math.Max(0, transitionCounter-200.0*float64(dt))
 
 		camScrollDest := rl.NewVector2(player.Pos.X-WIDTH/2, player.Pos.Y-HEIGHT/2)
 		dCamScroll := rl.NewVector2((camScrollDest.X-camScroll.X)*2, (camScrollDest.Y-camScroll.Y)*2)
@@ -830,6 +862,11 @@ func main() {
 
 		toolTex := toolUiAssets[player.Tool]
 		DrawTextureCenterV(toolTex, rl.NewVector2(float32(tm.Tilesize)*2, HEIGHT-80), float32(tm.Tilesize), float32(tm.TileScale))
+		if transitionCounter > 256 {
+			rl.DrawRectangle(0, 0, WIDTH, HEIGHT, rl.NewColor(0, 0, 0, uint8(512-transitionCounter)))
+		} else if transitionCounter > 0 {
+			rl.DrawRectangle(0, 0, WIDTH, HEIGHT, rl.NewColor(0, 0, 0, uint8(transitionCounter)))
+		}
 
 		rl.EndDrawing()
 	}
