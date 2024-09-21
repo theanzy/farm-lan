@@ -710,6 +710,7 @@ func main() {
 	})
 
 	var camScroll = rl.NewVector2(0, 0)
+	var day int = 0
 	transitionCounter := 0.0
 	for !rl.WindowShouldClose() {
 		playerMoveX := []float32{0, 0}
@@ -795,8 +796,7 @@ func main() {
 				hp := player.ToolHitPoint()
 				chp := world.GetCellPos(hp, float64(tm.Tilesize))
 				if _, ok := tm.Beds[chp]; ok {
-
-					fmt.Println("sleep")
+					day += 1
 					// start transition. block all inputs
 					transitionCounter = 512
 					// add plant age if soil is wet, reset soil to dry
@@ -806,7 +806,6 @@ func main() {
 						}
 						ft.IsWet = false
 						tm.FarmTiles[p] = ft
-						// TODO add days
 					}
 				}
 
@@ -858,6 +857,7 @@ func main() {
 		}
 
 		// draw ui
+		rl.DrawText(fmt.Sprintf("Day %d", day), 10, 10, 32, rl.White)
 		DrawTilesetId(tm.tilesetAsset, getFullCropTileId(currentSeed), seedUiPos, tm.tilesetCols, float32(tm.Tilesize))
 
 		toolTex := toolUiAssets[player.Tool]
