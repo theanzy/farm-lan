@@ -2,17 +2,15 @@ package main
 
 import (
 	"fmt"
-	"io/fs"
 	"math"
-	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/theanzy/farmsim/internal/anim"
+	"github.com/theanzy/farmsim/internal/crop"
+	"github.com/theanzy/farmsim/internal/inventory"
 	"github.com/theanzy/farmsim/internal/tileset"
 	"github.com/theanzy/farmsim/internal/world"
 )
@@ -48,7 +46,7 @@ type Tilemap struct {
 	Rows         int
 	Roofs        []Tile
 	FarmTiles    map[rl.Vector2]FarmTile
-	CropAssets   map[string]StripImg
+	CropAssets   map[string]crop.StripImg
 	TileScale    int
 }
 
@@ -225,7 +223,7 @@ func (tm *Tilemap) GetTiles(tiles []Tile, types []string) []Tile {
 	return res
 }
 
-func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]StripImg, tilesize int) Tilemap {
+func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]crop.StripImg, tilesize int) Tilemap {
 	var img = rl.LoadImage("./resources/map/tilesets.png")
 	defer rl.UnloadImage(img)
 	scale := tilesize / tmd.TileWidth
@@ -561,66 +559,25 @@ func DrawDepth(offset rl.Vector2, sprites []Sprite, drawRoof bool) {
 	}
 }
 
-func LoadToolUIAssets() map[string]rl.Texture2D {
+func LoadToolUIAsset() map[string]rl.Texture2D {
 	res := map[string]rl.Texture2D{}
 	res["axe"] = rl.LoadTexture("./resources/UI/axe.png")
 	res["shovel"] = rl.LoadTexture("./resources/UI/shovel.png")
 	res["water"] = rl.LoadTexture("./resources/UI/water.png")
 	return res
 }
+
+func LoadUIAsset() map[string]rl.Texture2D {
+	res := map[string]rl.Texture2D{}
+	res["selectbox_bl"] = rl.LoadTexture("./resources/UI/selectbox_bl.png")
+	res["selectbox_br"] = rl.LoadTexture("./resources/UI/selectbox_br.png")
+	res["selectbox_tl"] = rl.LoadTexture("./resources/UI/selectbox_tl.png")
+	res["selectbox_tr"] = rl.LoadTexture("./resources/UI/selectbox_tr.png")
+	return res
+}
 func UnloadTextureMap[K comparable](assets map[K]rl.Texture2D) {
 	for _, tex := range assets {
 		rl.UnloadTexture(tex)
-	}
-}
-
-type StripImg struct {
-	Img        rl.Texture2D
-	StripCount int
-	SrcRects   []rl.Rectangle
-}
-
-func LoadCropAssets(dirpath string, crops []string) (map[string]StripImg, error) {
-	r := regexp.MustCompile(`[a-z](\d+)\.png`)
-
-	res := map[string]StripImg{}
-	err := filepath.Walk(dirpath, func(path string, info fs.FileInfo, err error) error {
-		if filepath.Ext(path) == ".png" {
-			ftokens := strings.Split(info.Name(), "_")
-			cropName := ftokens[0]
-			if slices.Contains(crops, cropName) {
-				s := r.FindStringSubmatch(info.Name())[1]
-				strip, err := strconv.ParseInt(s, 10, 64)
-				if err != nil {
-					return err
-				}
-				stripCount := int(strip)
-				img := rl.LoadTexture(path)
-				rects := []rl.Rectangle{}
-				unitWidth := img.Width / int32(stripCount)
-				for i := range stripCount {
-					rect := rl.NewRectangle(float32(i)*float32(unitWidth), 0, float32(unitWidth), float32(img.Height))
-					rects = append(rects, rect)
-				}
-				res[cropName] = StripImg{
-					Img:        rl.LoadTexture(path),
-					StripCount: stripCount,
-					SrcRects:   rects,
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return map[string]StripImg{}, err
-	}
-
-	return res, nil
-}
-
-func UnloadCropAssets(assets map[string]StripImg) {
-	for _, stripImg := range assets {
-		rl.UnloadTexture(stripImg.Img)
 	}
 }
 
@@ -634,11 +591,14 @@ func main() {
 
 	// tileset id
 	var crops = []string{"carrot", "cauliflower", "pumpkin", "sunflower", "radish", "parsnip", "potato", "cabbage", "beetroot", "wheat", "kale"}
-	cropAssets, err := LoadCropAssets("./resources/elements/Crops", append(crops, "soil"))
+	cropAssets, err := crop.LoadCropAssets("./resources/elements/Crops", append(crops, "soil"))
 	if err != nil {
 		return
 	}
-	defer UnloadCropAssets(cropAssets)
+	defer crop.UnloadCropAssets(cropAssets)
+
+	uiAssets := LoadUIAsset()
+	defer UnloadTextureMap(uiAssets)
 
 	tmd, _ := tileset.ParseMap("./resources/map/0.tmj")
 	tm := LoadTilemap(&tmd, cropAssets, 48)
@@ -660,10 +620,10 @@ func main() {
 	humanAnimStyles := anim.NewAnimStyles("./resources/characters/Human", supportedStyles)
 	defer anim.UnloadAnimStyles(humanAnimStyles)
 
-	toolUiAssets := LoadToolUIAssets()
-	defer UnloadTextureMap(toolUiAssets)
+	toolsUIAsset := LoadToolUIAsset()
+	defer UnloadTextureMap(toolsUIAsset)
 	tools := []string{}
-	for t := range toolUiAssets {
+	for t := range toolsUIAsset {
 		tools = append(tools, t)
 	}
 
@@ -709,6 +669,16 @@ func main() {
 		},
 	})
 
+	playerInventory := inventory.NewInventory(cropAssets)
+	defer playerInventory.DeinitInventory()
+	inventoryContainer := rl.NewRectangle(WIDTH*0.5-800*0.5, HEIGHT*0.5-600*0.5, 800, 600)
+	inventoryIdx := 0
+	showInventory := false
+
+	const padding float32 = 28.0
+	slotSize := float32(tm.Tilesize)
+	colCount := float32(math.Floor(float64(inventoryContainer.Width / (slotSize + padding))))
+
 	var camScroll = rl.NewVector2(0, 0)
 	var day int = 0
 	transitionCounter := 0.0
@@ -716,8 +686,22 @@ func main() {
 		playerMoveX := []float32{0, 0}
 		playerMoveY := []float32{0, 0}
 		dt := rl.GetFrameTime()
-		if transitionCounter == 0 {
+		if transitionCounter > 0 {
+			transitionCounter = math.Max(0, transitionCounter-200.0*float64(dt))
+		} else if showInventory {
+			if rl.IsKeyPressed(rl.KeyI) {
+				showInventory = false
+			} else if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
+				for i := range playerInventory.Items() {
+					mpos := rl.GetMousePosition()
+					irect := InventorySlotRect(inventoryContainer, i, padding, slotSize, colCount)
+					if rl.CheckCollisionPointRec(mpos, irect) {
+						inventoryIdx = i
+					}
+				}
 
+			}
+		} else {
 			if rl.IsKeyDown(rl.KeyUp) {
 				playerMoveY[0] = 1
 			}
@@ -810,9 +794,10 @@ func main() {
 				}
 
 			}
+			if rl.IsKeyPressed(rl.KeyI) {
+				showInventory = !showInventory
+			}
 		}
-
-		transitionCounter = math.Max(0, transitionCounter-200.0*float64(dt))
 
 		camScrollDest := rl.NewVector2(player.Pos.X-WIDTH/2, player.Pos.Y-HEIGHT/2)
 		dCamScroll := rl.NewVector2((camScrollDest.X-camScroll.X)*2, (camScrollDest.Y-camScroll.Y)*2)
@@ -860,7 +845,7 @@ func main() {
 		rl.DrawText(fmt.Sprintf("Day %d", day), 10, 10, 32, rl.White)
 		DrawTilesetId(tm.tilesetAsset, getFullCropTileId(currentSeed), seedUiPos, tm.tilesetCols, float32(tm.Tilesize))
 
-		toolTex := toolUiAssets[player.Tool]
+		toolTex := toolsUIAsset[player.Tool]
 		DrawTextureCenterV(toolTex, rl.NewVector2(float32(tm.Tilesize)*2, HEIGHT-80), float32(tm.Tilesize), float32(tm.TileScale))
 		if transitionCounter > 256 {
 			rl.DrawRectangle(0, 0, WIDTH, HEIGHT, rl.NewColor(0, 0, 0, uint8(512-transitionCounter)))
@@ -868,8 +853,80 @@ func main() {
 			rl.DrawRectangle(0, 0, WIDTH, HEIGHT, rl.NewColor(0, 0, 0, uint8(transitionCounter)))
 		}
 
+		// draw inventory
+		if showInventory {
+			rl.DrawRectangleRec(inventoryContainer, rl.Beige)
+			rl.DrawText("Inventory", int32(inventoryContainer.X)+20, int32(inventoryContainer.Y)+10, 30, rl.White)
+			items := playerInventory.Items()
+			for i, item := range items {
+				rect := InventorySlotRect(inventoryContainer, i, padding, slotSize, colCount)
+				rl.DrawRectangleRec(rect, rl.Brown)
+				tx := rect.X + slotSize*0.5 - float32(item.Image.Width)*float32(tm.TileScale)*0.5
+				ty := rect.Y + slotSize*0.5 - float32(item.Image.Height)*float32(tm.TileScale)*0.5
+				rl.DrawTextureEx(item.Image, rl.NewVector2(tx, ty), 0, float32(tm.TileScale), rl.White)
+				if inventoryIdx == i {
+					shift := slotSize * 0.25
+					stl := rl.NewVector2(rect.X-shift, rect.Y-shift)
+					str := rl.NewVector2(rect.X+slotSize-shift, rect.Y-shift)
+					sbl := rl.NewVector2(rect.X-shift, rect.Y+slotSize-shift)
+					sbr := rl.NewVector2(rect.X+slotSize-shift, rect.Y+slotSize-shift)
+					rl.DrawTextureEx(uiAssets["selectbox_tl"], stl, 0, float32(tm.TileScale), rl.White)
+					rl.DrawTextureEx(uiAssets["selectbox_tr"], str, 0, float32(tm.TileScale), rl.White)
+					rl.DrawTextureEx(uiAssets["selectbox_br"], sbr, 0, float32(tm.TileScale), rl.White)
+					rl.DrawTextureEx(uiAssets["selectbox_bl"], sbl, 0, float32(tm.TileScale), rl.White)
+				}
+			}
+			descRect := rl.NewRectangle(inventoryContainer.X+padding, inventoryContainer.Y+inventoryContainer.Height-padding-180, inventoryContainer.Width-padding*2, 180)
+			rl.DrawRectangleRec(descRect, rl.White)
+			rl.DrawText(items[inventoryIdx].Name, int32(descRect.X+padding), int32(descRect.Y+padding*0.5), 25, rl.Black)
+
+			priceText := fmt.Sprintf("$%d", items[inventoryIdx].SellPrice)
+			priceTextW := rl.MeasureText(priceText, 25)
+			rl.DrawText(priceText, int32(descRect.X+descRect.Width-padding-float32(priceTextW)), int32(descRect.Y+padding*0.5), 25, rl.DarkGray)
+
+			// description
+			desc := items[inventoryIdx].Description
+			words := strings.Split(desc, " ")
+			fontsize := 20
+			descWidth := rl.MeasureText(desc, int32(fontsize))
+			if descWidth > int32(descRect.Width-padding*2) {
+				gap := 10
+				rl.DrawText(strings.Join(words[0:gap], " "), int32(descRect.X+padding), int32(descRect.Y+padding*2), int32(fontsize), rl.Gray)
+				i := 0
+				h := 3
+				for {
+					start := i + gap
+					end := start + gap
+					breaking := false
+					if len(words) < start {
+						start = len(words)
+					}
+					if len(words) < end {
+						end = len(words)
+						breaking = true
+					}
+					w := strings.Join(words[start:end], " ")
+					rl.DrawText(w, int32(descRect.X+padding), int32(descRect.Y+padding*float32(h)), int32(fontsize), rl.Gray)
+					i += gap
+					h += 1
+					if breaking {
+						break
+					}
+				}
+
+			} else {
+				rl.DrawText(desc, int32(descRect.X+padding), int32(descRect.Y+padding*2), int32(fontsize), rl.Gray)
+			}
+		}
 		rl.EndDrawing()
 	}
+}
+
+func InventorySlotRect(inventoryContainer rl.Rectangle, i int, padding float32, slotsize float32, colCount float32) rl.Rectangle {
+	x := inventoryContainer.X + padding + ((padding + slotsize) * (float32(math.Mod(float64(i), float64(colCount)))))
+	y := inventoryContainer.Y + padding*2 + ((padding + slotsize) * (float32(math.Floor(float64(i) / float64(colCount)))))
+	rect := rl.NewRectangle(x, y, slotsize, slotsize)
+	return rect
 }
 
 func DrawTextureCenterV(tex rl.Texture2D, pos rl.Vector2, tilesize float32, tilescale float32) {

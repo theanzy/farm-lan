@@ -12,11 +12,11 @@
             "scaleInDock": 1
         },
         "0.tmj": {
-            "scale": 4,
+            "scale": 1.5,
             "selectedLayer": 19,
             "viewCenter": {
-                "x": 677.125,
-                "y": 419.625
+                "x": 817,
+                "y": 353
             }
         },
         "0.tmj#plain-color": {
