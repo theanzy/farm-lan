@@ -672,7 +672,7 @@ func main() {
 	playerInventory := inventory.NewInventory(cropAssets)
 	defer playerInventory.DeinitInventory()
 	inventoryContainer := rl.NewRectangle(WIDTH*0.5-800*0.5, HEIGHT*0.5-600*0.5, 800, 600)
-	inventoryIdx := 0
+	inventoryId := ""
 	showInventory := false
 
 	const padding float32 = 28.0
@@ -692,11 +692,11 @@ func main() {
 			if rl.IsKeyPressed(rl.KeyI) {
 				showInventory = false
 			} else if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
-				for i := range playerInventory.Items() {
+				for i, item := range playerInventory.Items() {
 					mpos := rl.GetMousePosition()
 					irect := InventorySlotRect(inventoryContainer, i, padding, slotSize, colCount)
 					if rl.CheckCollisionPointRec(mpos, irect) {
-						inventoryIdx = i
+						inventoryId = item.Name
 					}
 				}
 
@@ -792,7 +792,6 @@ func main() {
 						tm.FarmTiles[p] = ft
 					}
 				}
-
 			}
 			if rl.IsKeyPressed(rl.KeyI) {
 				showInventory = !showInventory
@@ -858,13 +857,15 @@ func main() {
 			rl.DrawRectangleRec(inventoryContainer, rl.Beige)
 			rl.DrawText("Inventory", int32(inventoryContainer.X)+20, int32(inventoryContainer.Y)+10, 30, rl.White)
 			items := playerInventory.Items()
+			inventoryIdx := 0
 			for i, item := range items {
 				rect := InventorySlotRect(inventoryContainer, i, padding, slotSize, colCount)
 				rl.DrawRectangleRec(rect, rl.Brown)
 				tx := rect.X + slotSize*0.5 - float32(item.Image.Width)*float32(tm.TileScale)*0.5
 				ty := rect.Y + slotSize*0.5 - float32(item.Image.Height)*float32(tm.TileScale)*0.5
 				rl.DrawTextureEx(item.Image, rl.NewVector2(tx, ty), 0, float32(tm.TileScale), rl.White)
-				if inventoryIdx == i {
+				if inventoryId == item.Name {
+					inventoryIdx = i
 					shift := slotSize * 0.25
 					stl := rl.NewVector2(rect.X-shift, rect.Y-shift)
 					str := rl.NewVector2(rect.X+slotSize-shift, rect.Y-shift)
