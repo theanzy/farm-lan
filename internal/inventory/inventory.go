@@ -1,7 +1,10 @@
 package inventory
 
 import (
+	"fmt"
+	"math"
 	"slices"
+	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/theanzy/farmsim/internal/crop"
@@ -194,4 +197,114 @@ func (i *Inventory) Items() []InventoryItem {
 		}
 	}
 	return res
+}
+
+type InventoryUI struct {
+	container   rl.Rectangle
+	padding     float32
+	slotsize    float32
+	colcount    float32
+	InventoryId string
+}
+
+func NewInventoryUI(screenWidth float32, screenHeight float32, tilesize float32) InventoryUI {
+	var w float32 = 800.0
+	var h float32 = 600.0
+	container := rl.NewRectangle(screenWidth*0.5-w*0.5, screenHeight*0.5-h*0.5, w, h)
+	const padding float32 = 28.0
+	slotsize := tilesize
+	colcount := float32(math.Floor(float64(container.Width / (slotsize + padding))))
+	return InventoryUI{
+		container:   container,
+		padding:     padding,
+		slotsize:    slotsize,
+		colcount:    colcount,
+		InventoryId: "",
+	}
+
+}
+
+func (ui *InventoryUI) ItemClick(inventory *Inventory, mpos rl.Vector2) {
+	for i, item := range inventory.Items() {
+		irect := InventorySlotRect(ui.container, i, ui.padding, ui.slotsize, ui.colcount)
+		if rl.CheckCollisionPointRec(mpos, irect) {
+			ui.InventoryId = item.Name
+		}
+	}
+}
+
+func (ui *InventoryUI) Draw(inventory *Inventory, uiAssets map[string]rl.Texture2D, tilescale float32) {
+	rl.DrawRectangleRec(ui.container, rl.Beige)
+	rl.DrawText("Inventory", int32(ui.container.X)+20, int32(ui.container.Y)+10, 30, rl.White)
+	items := inventory.Items()
+	inventoryIdx := 0
+	padding := ui.padding
+	for i, item := range items {
+		rect := InventorySlotRect(ui.container, i, padding, ui.slotsize, ui.colcount)
+		rl.DrawRectangleRec(rect, rl.Brown)
+		tx := rect.X + ui.slotsize*0.5 - float32(item.Image.Width)*tilescale*0.5
+		ty := rect.Y + ui.slotsize*0.5 - float32(item.Image.Height)*tilescale*0.5
+		rl.DrawTextureEx(item.Image, rl.NewVector2(tx, ty), 0, tilescale, rl.White)
+		if ui.InventoryId == item.Name {
+			inventoryIdx = i
+			shift := ui.slotsize * 0.25
+			stl := rl.NewVector2(rect.X-shift, rect.Y-shift)
+			str := rl.NewVector2(rect.X+ui.slotsize-shift, rect.Y-shift)
+			sbl := rl.NewVector2(rect.X-shift, rect.Y+ui.slotsize-shift)
+			sbr := rl.NewVector2(rect.X+ui.slotsize-shift, rect.Y+ui.slotsize-shift)
+			rl.DrawTextureEx(uiAssets["selectbox_tl"], stl, 0, tilescale, rl.White)
+			rl.DrawTextureEx(uiAssets["selectbox_tr"], str, 0, tilescale, rl.White)
+			rl.DrawTextureEx(uiAssets["selectbox_br"], sbr, 0, tilescale, rl.White)
+			rl.DrawTextureEx(uiAssets["selectbox_bl"], sbl, 0, tilescale, rl.White)
+		}
+	}
+	// name
+	descRect := rl.NewRectangle(ui.container.X+padding, ui.container.Y+ui.container.Height-padding-180, ui.container.Width-padding*2, 180)
+	rl.DrawRectangleRec(descRect, rl.White)
+	rl.DrawText(items[inventoryIdx].Name, int32(descRect.X+padding), int32(descRect.Y+padding*0.5), 25, rl.Black)
+
+	// price
+	priceText := fmt.Sprintf("$%d", items[inventoryIdx].SellPrice)
+	priceTextW := rl.MeasureText(priceText, 25)
+	rl.DrawText(priceText, int32(descRect.X+descRect.Width-padding-float32(priceTextW)), int32(descRect.Y+padding*0.5), 25, rl.DarkGray)
+
+	// description
+	desc := items[inventoryIdx].Description
+	words := strings.Split(desc, " ")
+	fontsize := 20
+	descWidth := rl.MeasureText(desc, int32(fontsize))
+	if descWidth > int32(descRect.Width-padding*2) {
+		gap := 10
+		rl.DrawText(strings.Join(words[0:gap], " "), int32(descRect.X+padding), int32(descRect.Y+padding*2), int32(fontsize), rl.Gray)
+		i := 0
+		h := 3
+		for {
+			start := i + gap
+			end := start + gap
+			breaking := false
+			if len(words) < start {
+				start = len(words)
+			}
+			if len(words) < end {
+				end = len(words)
+				breaking = true
+			}
+			w := strings.Join(words[start:end], " ")
+			rl.DrawText(w, int32(descRect.X+padding), int32(descRect.Y+padding*float32(h)), int32(fontsize), rl.Gray)
+			i += gap
+			h += 1
+			if breaking {
+				break
+			}
+		}
+
+	} else {
+		rl.DrawText(desc, int32(descRect.X+padding), int32(descRect.Y+padding*2), int32(fontsize), rl.Gray)
+	}
+}
+func InventorySlotRect(container rl.Rectangle, i int, padding float32, slotsize float32, colCount float32) rl.Rectangle {
+	x := container.X + padding + ((padding + slotsize) * (float32(math.Mod(float64(i), float64(colCount)))))
+	y := container.Y + padding*2 + ((padding + slotsize) * (float32(math.Floor(float64(i) / float64(colCount)))))
+	rect := rl.NewRectangle(x, y, slotsize, slotsize)
+	return rect
 }

@@ -5,7 +5,6 @@ import (
 	"math"
 	"slices"
 	"sort"
-	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/theanzy/farmsim/internal/anim"
@@ -671,13 +670,8 @@ func main() {
 
 	playerInventory := inventory.NewInventory(cropAssets)
 	defer playerInventory.DeinitInventory()
-	inventoryContainer := rl.NewRectangle(WIDTH*0.5-800*0.5, HEIGHT*0.5-600*0.5, 800, 600)
-	inventoryId := ""
+	inventoryUI := inventory.NewInventoryUI(WIDTH, HEIGHT, float32(tm.Tilesize))
 	showInventory := false
-
-	const padding float32 = 28.0
-	slotSize := float32(tm.Tilesize)
-	colCount := float32(math.Floor(float64(inventoryContainer.Width / (slotSize + padding))))
 
 	var camScroll = rl.NewVector2(0, 0)
 	var day int = 0
@@ -692,14 +686,7 @@ func main() {
 			if rl.IsKeyPressed(rl.KeyI) {
 				showInventory = false
 			} else if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
-				for i, item := range playerInventory.Items() {
-					mpos := rl.GetMousePosition()
-					irect := InventorySlotRect(inventoryContainer, i, padding, slotSize, colCount)
-					if rl.CheckCollisionPointRec(mpos, irect) {
-						inventoryId = item.Name
-					}
-				}
-
+				inventoryUI.ItemClick(&playerInventory, rl.GetMousePosition())
 			}
 		} else {
 			if rl.IsKeyDown(rl.KeyUp) {
@@ -854,70 +841,7 @@ func main() {
 
 		// draw inventory
 		if showInventory {
-			rl.DrawRectangleRec(inventoryContainer, rl.Beige)
-			rl.DrawText("Inventory", int32(inventoryContainer.X)+20, int32(inventoryContainer.Y)+10, 30, rl.White)
-			items := playerInventory.Items()
-			inventoryIdx := 0
-			for i, item := range items {
-				rect := InventorySlotRect(inventoryContainer, i, padding, slotSize, colCount)
-				rl.DrawRectangleRec(rect, rl.Brown)
-				tx := rect.X + slotSize*0.5 - float32(item.Image.Width)*float32(tm.TileScale)*0.5
-				ty := rect.Y + slotSize*0.5 - float32(item.Image.Height)*float32(tm.TileScale)*0.5
-				rl.DrawTextureEx(item.Image, rl.NewVector2(tx, ty), 0, float32(tm.TileScale), rl.White)
-				if inventoryId == item.Name {
-					inventoryIdx = i
-					shift := slotSize * 0.25
-					stl := rl.NewVector2(rect.X-shift, rect.Y-shift)
-					str := rl.NewVector2(rect.X+slotSize-shift, rect.Y-shift)
-					sbl := rl.NewVector2(rect.X-shift, rect.Y+slotSize-shift)
-					sbr := rl.NewVector2(rect.X+slotSize-shift, rect.Y+slotSize-shift)
-					rl.DrawTextureEx(uiAssets["selectbox_tl"], stl, 0, float32(tm.TileScale), rl.White)
-					rl.DrawTextureEx(uiAssets["selectbox_tr"], str, 0, float32(tm.TileScale), rl.White)
-					rl.DrawTextureEx(uiAssets["selectbox_br"], sbr, 0, float32(tm.TileScale), rl.White)
-					rl.DrawTextureEx(uiAssets["selectbox_bl"], sbl, 0, float32(tm.TileScale), rl.White)
-				}
-			}
-			descRect := rl.NewRectangle(inventoryContainer.X+padding, inventoryContainer.Y+inventoryContainer.Height-padding-180, inventoryContainer.Width-padding*2, 180)
-			rl.DrawRectangleRec(descRect, rl.White)
-			rl.DrawText(items[inventoryIdx].Name, int32(descRect.X+padding), int32(descRect.Y+padding*0.5), 25, rl.Black)
-
-			priceText := fmt.Sprintf("$%d", items[inventoryIdx].SellPrice)
-			priceTextW := rl.MeasureText(priceText, 25)
-			rl.DrawText(priceText, int32(descRect.X+descRect.Width-padding-float32(priceTextW)), int32(descRect.Y+padding*0.5), 25, rl.DarkGray)
-
-			// description
-			desc := items[inventoryIdx].Description
-			words := strings.Split(desc, " ")
-			fontsize := 20
-			descWidth := rl.MeasureText(desc, int32(fontsize))
-			if descWidth > int32(descRect.Width-padding*2) {
-				gap := 10
-				rl.DrawText(strings.Join(words[0:gap], " "), int32(descRect.X+padding), int32(descRect.Y+padding*2), int32(fontsize), rl.Gray)
-				i := 0
-				h := 3
-				for {
-					start := i + gap
-					end := start + gap
-					breaking := false
-					if len(words) < start {
-						start = len(words)
-					}
-					if len(words) < end {
-						end = len(words)
-						breaking = true
-					}
-					w := strings.Join(words[start:end], " ")
-					rl.DrawText(w, int32(descRect.X+padding), int32(descRect.Y+padding*float32(h)), int32(fontsize), rl.Gray)
-					i += gap
-					h += 1
-					if breaking {
-						break
-					}
-				}
-
-			} else {
-				rl.DrawText(desc, int32(descRect.X+padding), int32(descRect.Y+padding*2), int32(fontsize), rl.Gray)
-			}
+			inventoryUI.Draw(&playerInventory, uiAssets, float32(tm.TileScale))
 		}
 		rl.EndDrawing()
 	}
