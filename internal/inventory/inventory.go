@@ -157,6 +157,126 @@ func NewInventory(assets map[string]crop.StripImg) Inventory {
 				Image:       cropStrip(assets["wheat"], 3),
 			},
 			Quantity: 5,
+		}, {
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    12,
+				SellPrice:   20,
+				Name:        "Beetroot",
+				Description: "Beetroot is a cool-season crop that thrives in well-drained soil with regular watering. It has roots and greens for harvest and sale",
+				Image:       cropStrip(assets["beetroot"], 4),
+			},
+			Quantity: 0,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   22,
+				Name:        "Cabbage",
+				Description: "Cabbage is a hardy, cool-season, thriving in fertile, well-drained soil with plenty of sunlight",
+				Image:       cropStrip(assets["cabbage"], 4),
+			},
+			Quantity: 0,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   25,
+				Name:        "Carrot",
+				Description: "Carrots are a crunchy root vegetable that thrive in loose, sandy soil. They need plenty of sunlight and regular watering for best results.",
+				Image:       cropStrip(assets["carrot"], 4),
+			},
+			Quantity: 1,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   32,
+				Name:        "Cauliflower",
+				Description: "Cauliflower is a white and crunchy vegetable. It likes sunny spots and lots of water to grow big and healthy.",
+				Image:       cropStrip(assets["cauliflower"], 4),
+			},
+			Quantity: 1,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   30,
+				Name:        "Kale",
+				Description: "Kale is a versatile leafy green superfood packed with robust flavor. Its earthy, slightly bitter taste and hearty texture make it adaptable for everything from raw salads and smoothies to comforting soups and even chips.",
+				Image:       cropStrip(assets["kale"], 4),
+			},
+			Quantity: 1,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   12,
+				Name:        "Parsnip",
+				Description: "A parsnip is a pale, tapered root vegetable that resembles a white carrot. The resemblance makes sense, because parsnips and carrots are cousins.",
+				Image:       cropStrip(assets["parsnip"], 4),
+			},
+			Quantity: 1,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   12,
+				Name:        "Potato",
+				Description: "It grows well in cool climates. Potatoes are often boiled, fried, or baked.",
+				Image:       cropStrip(assets["potato"], 4),
+			},
+			Quantity: 5,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   12,
+				Name:        "Pumpkin",
+				Description: "Pumpkin is a plump, nutritious orange vegetable, and a highly nutrient dense food. It is low in calories but rich in vitamins and minerals.",
+				Image:       cropStrip(assets["pumpkin"], 4),
+			},
+			Quantity: 5,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   12,
+				Name:        "Radish",
+				Description: "That slightly bitter, crunchy vegetable you pulled out of the garden bed is a radish. Many people love to eat sliced radishes on salads or buttered toast.",
+				Image:       cropStrip(assets["radish"], 4),
+			},
+			Quantity: 5,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   12,
+				Name:        "Sunflower",
+				Description: "The sunflower always faces toward the sun. The sunflower plant is 1 to 4 metres tall, but in good soil, it grows up to 5 metres.",
+				Image:       cropStrip(assets["sunflower"], 4),
+			},
+			Quantity: 5,
+		},
+		{
+			Item: Item{
+				Type:        "crop",
+				BuyPrice:    15,
+				SellPrice:   12,
+				Name:        "Wheat",
+				Description: "A cereal grain that yields a fine white flour used chiefly in breads, baked goods, and pastas.",
+				Image:       cropStrip(assets["wheat"], 4),
+			},
+			Quantity: 5,
 		},
 	}
 	return Inventory{items: items}
