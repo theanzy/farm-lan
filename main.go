@@ -676,10 +676,23 @@ func main() {
 	var camScroll = rl.NewVector2(0, 0)
 	var day int = 0
 	transitionCounter := 0.0
+	overlays := []rl.Color{
+		rl.NewColor(255, 255, 255, 0),
+		rl.NewColor(247, 228, 160, 20),
+		rl.NewColor(255, 151, 89, 100),
+		rl.NewColor(70, 63, 103, 100),
+		rl.NewColor(4, 26, 54, 150),
+		rl.NewColor(84, 88, 131, 80),
+	}
+	overlayIdx := 1
+	overlayColor := overlays[0]
+	overlayCounter := 0
+
 	for !rl.WindowShouldClose() {
 		playerMoveX := []float32{0, 0}
 		playerMoveY := []float32{0, 0}
 		dt := rl.GetFrameTime()
+
 		if transitionCounter > 0 {
 			transitionCounter = math.Max(0, transitionCounter-200.0*float64(dt))
 		} else if showInventory {
@@ -797,6 +810,30 @@ func main() {
 			if rl.IsKeyPressed(rl.KeyI) {
 				showInventory = !showInventory
 			}
+			overlayCounter += 1
+			if overlayCounter >= 30 {
+				overlayCounter = 0
+				destColor := overlays[overlayIdx]
+				diffR := int(destColor.R) - int(overlayColor.R)
+				diffG := int(destColor.G) - int(overlayColor.G)
+				diffB := int(destColor.B) - int(overlayColor.B)
+				diffA := int(destColor.A) - int(overlayColor.A)
+				if diffR != 0 {
+					overlayColor.R = uint8(int(overlayColor.R) + diffR/int(math.Abs(float64(diffR))))
+				}
+				if diffG != 0 {
+					overlayColor.G = uint8(int(overlayColor.G) + diffG/int(math.Abs(float64(diffG))))
+				}
+				if diffB != 0 {
+					overlayColor.B = uint8(int(overlayColor.B) + diffB/int(math.Abs(float64(diffB))))
+				}
+				if diffA != 0 {
+					overlayColor.A = uint8(int(overlayColor.A) + diffA/int(math.Abs(float64(diffA))))
+				}
+				if diffR == 0 && diffG == 0 && diffB == 0 && diffA == 0 {
+					overlayIdx = (overlayIdx + 1) % len(overlays)
+				}
+			}
 		}
 
 		camScrollDest := rl.NewVector2(player.Pos.X-WIDTH/2, player.Pos.Y-HEIGHT/2)
@@ -842,6 +879,8 @@ func main() {
 		}
 
 		// draw ui
+		rl.DrawRectangle(0, 0, WIDTH, HEIGHT, overlayColor)
+
 		rl.DrawText(fmt.Sprintf("Day %d", day), 10, 10, 32, rl.White)
 		DrawTilesetId(tm.tilesetAsset, getFullCropTileId(currentSeed), seedUiPos, tm.tilesetCols, float32(tm.Tilesize))
 
