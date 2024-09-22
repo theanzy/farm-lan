@@ -688,6 +688,7 @@ func main() {
 			} else if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
 				inventoryUI.ItemClick(&playerInventory, rl.GetMousePosition())
 			}
+			inventoryUI.ItemHover(&playerInventory, rl.GetMousePosition())
 		} else {
 			if rl.IsKeyDown(rl.KeyUp) {
 				playerMoveY[0] = 1

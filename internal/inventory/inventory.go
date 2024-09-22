@@ -205,6 +205,7 @@ type InventoryUI struct {
 	slotsize    float32
 	colcount    float32
 	InventoryId string
+	hoverId     string
 }
 
 func NewInventoryUI(screenWidth float32, screenHeight float32, tilesize float32) InventoryUI {
@@ -233,6 +234,33 @@ func (ui *InventoryUI) ItemClick(inventory *Inventory, mpos rl.Vector2) {
 	}
 }
 
+func (ui *InventoryUI) ItemHover(inventory *Inventory, mpos rl.Vector2) {
+	hovered := false
+	for i, item := range inventory.Items() {
+		irect := InventorySlotRect(ui.container, i, ui.padding, ui.slotsize, ui.colcount)
+		if rl.CheckCollisionPointRec(mpos, irect) && item.Name != ui.InventoryId {
+			hovered = true
+			ui.hoverId = item.Name
+		}
+	}
+	if !hovered {
+		ui.hoverId = ""
+	}
+}
+
+func (ui *InventoryUI) DrawSlotSelection(rect rl.Rectangle, tilescale float32, uiAssets map[string]rl.Texture2D, alpha uint8) {
+	shift := ui.slotsize * 0.25
+	stl := rl.NewVector2(rect.X-shift, rect.Y-shift)
+	str := rl.NewVector2(rect.X+ui.slotsize-shift, rect.Y-shift)
+	sbl := rl.NewVector2(rect.X-shift, rect.Y+ui.slotsize-shift)
+	sbr := rl.NewVector2(rect.X+ui.slotsize-shift, rect.Y+ui.slotsize-shift)
+	tint := rl.NewColor(255, 255, 255, alpha)
+	rl.DrawTextureEx(uiAssets["selectbox_tl"], stl, 0, tilescale, tint)
+	rl.DrawTextureEx(uiAssets["selectbox_tr"], str, 0, tilescale, tint)
+	rl.DrawTextureEx(uiAssets["selectbox_br"], sbr, 0, tilescale, tint)
+	rl.DrawTextureEx(uiAssets["selectbox_bl"], sbl, 0, tilescale, tint)
+}
+
 func (ui *InventoryUI) Draw(inventory *Inventory, uiAssets map[string]rl.Texture2D, tilescale float32) {
 	rl.DrawRectangleRec(ui.container, rl.Beige)
 	rl.DrawText("Inventory", int32(ui.container.X)+20, int32(ui.container.Y)+10, 30, rl.White)
@@ -247,15 +275,9 @@ func (ui *InventoryUI) Draw(inventory *Inventory, uiAssets map[string]rl.Texture
 		rl.DrawTextureEx(item.Image, rl.NewVector2(tx, ty), 0, tilescale, rl.White)
 		if ui.InventoryId == item.Name {
 			inventoryIdx = i
-			shift := ui.slotsize * 0.25
-			stl := rl.NewVector2(rect.X-shift, rect.Y-shift)
-			str := rl.NewVector2(rect.X+ui.slotsize-shift, rect.Y-shift)
-			sbl := rl.NewVector2(rect.X-shift, rect.Y+ui.slotsize-shift)
-			sbr := rl.NewVector2(rect.X+ui.slotsize-shift, rect.Y+ui.slotsize-shift)
-			rl.DrawTextureEx(uiAssets["selectbox_tl"], stl, 0, tilescale, rl.White)
-			rl.DrawTextureEx(uiAssets["selectbox_tr"], str, 0, tilescale, rl.White)
-			rl.DrawTextureEx(uiAssets["selectbox_br"], sbr, 0, tilescale, rl.White)
-			rl.DrawTextureEx(uiAssets["selectbox_bl"], sbl, 0, tilescale, rl.White)
+			ui.DrawSlotSelection(rect, tilescale, uiAssets, 255)
+		} else if ui.hoverId == item.Name {
+			ui.DrawSlotSelection(rect, tilescale, uiAssets, 100)
 		}
 	}
 	// name
