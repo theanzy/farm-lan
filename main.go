@@ -27,9 +27,9 @@ func (t Tile) Center(tilesize float32) rl.Vector2 {
 type FarmTile struct {
 	Pos rl.Vector2
 	// empty, digged, name of plant
-	IsWet    bool
-	State    string
-	PlantAge int
+	IsWet   bool
+	State   string
+	CropAge int
 }
 
 type Tilemap struct {
@@ -107,7 +107,7 @@ func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
 			}
 		} else if ca, ok := tm.CropAssets[ft.State]; ok {
 			soil := tm.CropAssets["soil"]
-			age := ft.PlantAge
+			age := min(ft.CropAge, ca.StripCount-1)
 			rl.DrawTexturePro(
 				soil.Img,
 				soil.SrcRects[age],
@@ -264,9 +264,9 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]crop.StripImg, 
 			}
 			if layer.Name == "farm_tile" && id > 0 {
 				tm.FarmTiles[cellpos] = FarmTile{
-					Pos:      cellpos,
-					State:    "empty",
-					PlantAge: 0,
+					Pos:     cellpos,
+					State:   "empty",
+					CropAge: 0,
 				}
 			}
 			if id == 0 {
@@ -774,14 +774,20 @@ func main() {
 			if rl.IsKeyPressed(rl.KeySpace) {
 				hp := player.ToolHitPoint()
 				chp := world.GetCellPos(hp, float64(tm.Tilesize))
-				if _, ok := tm.Beds[chp]; ok {
+				if ft, ok := GetFullyGrownCrop(chp, tm.FarmTiles, cropAssets); ok {
+					playerInventory.Increase(inventory.CropToCropName(ft.State), 1)
+					ft.State = "digged"
+					ft.CropAge = 0
+					tm.FarmTiles[ft.Pos] = ft
+					// TODO add sfx
+				} else if _, ok := tm.Beds[chp]; ok {
 					day += 1
 					// start transition. block all inputs
 					transitionCounter = 512
 					// add plant age if soil is wet, reset soil to dry
 					for p, ft := range tm.FarmTiles {
 						if ft.IsWet {
-							ft.PlantAge = ft.PlantAge + 1
+							ft.CropAge = ft.CropAge + 1
 						}
 						ft.IsWet = false
 						tm.FarmTiles[p] = ft
@@ -855,11 +861,13 @@ func main() {
 	}
 }
 
-func InventorySlotRect(inventoryContainer rl.Rectangle, i int, padding float32, slotsize float32, colCount float32) rl.Rectangle {
-	x := inventoryContainer.X + padding + ((padding + slotsize) * (float32(math.Mod(float64(i), float64(colCount)))))
-	y := inventoryContainer.Y + padding*2 + ((padding + slotsize) * (float32(math.Floor(float64(i) / float64(colCount)))))
-	rect := rl.NewRectangle(x, y, slotsize, slotsize)
-	return rect
+func GetFullyGrownCrop(cellpos rl.Vector2, farmTiles map[rl.Vector2]FarmTile, cropAssets map[string]crop.StripImg) (FarmTile, bool) {
+	if ft, ok := farmTiles[cellpos]; ok {
+		if ca, ok := cropAssets[ft.State]; ok && ft.CropAge >= ca.StripCount {
+			return ft, true
+		}
+	}
+	return FarmTile{}, false
 }
 
 func DrawTextureCenterV(tex rl.Texture2D, pos rl.Vector2, tilesize float32, tilescale float32) {

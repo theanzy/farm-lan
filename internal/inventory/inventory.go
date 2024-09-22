@@ -326,11 +326,6 @@ func (i *Inventory) AvailableSeeds() []string {
 	return res
 }
 
-func CropToSeedName(cropName string) string {
-	return strings.ToUpper(cropName[0:1]) + cropName[1:] + " seed"
-
-}
-
 func (i *Inventory) Items() []InventoryItem {
 	res := []InventoryItem{}
 	for _, item := range i.items {
@@ -477,4 +472,12 @@ func InventorySlotRect(container rl.Rectangle, i int, padding float32, slotsize 
 	y := container.Y + padding*2 + ((padding + slotsize) * (float32(math.Floor(float64(i) / float64(colCount)))))
 	rect := rl.NewRectangle(x, y, slotsize, slotsize)
 	return rect
+}
+
+func CropToSeedName(cropName string) string {
+	return strings.ToUpper(cropName[0:1]) + cropName[1:] + " seed"
+}
+
+func CropToCropName(cropName string) string {
+	return strings.ToUpper(cropName[0:1]) + cropName[1:]
 }
