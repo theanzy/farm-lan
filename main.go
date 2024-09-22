@@ -745,9 +745,10 @@ func main() {
 				}
 			}
 			if rl.IsKeyPressed(rl.KeyD) {
-				if idx := slices.Index(crops, currentSeed); idx != -1 {
-					idx = (idx + 1) % len(crops)
-					currentSeed = crops[idx]
+				seeds := playerInventory.AvailableSeeds()
+				if idx := slices.Index(seeds, currentSeed); idx != -1 {
+					idx = (idx + 1) % len(seeds)
+					currentSeed = seeds[idx]
 				}
 			}
 			if rl.IsKeyPressed(rl.KeyX) {
@@ -761,6 +762,12 @@ func main() {
 					if ft, ok := tm.FarmTiles[cp]; ok && ft.State == "digged" {
 						ft.State = currentSeed
 						tm.FarmTiles[cp] = ft
+						if q := playerInventory.Decrease(inventory.CropToSeedName(currentSeed), 1); q == 0 {
+							seeds := playerInventory.AvailableSeeds()
+							if len(seeds) > 0 {
+								currentSeed = playerInventory.AvailableSeeds()[0]
+							}
+						}
 					}
 				}
 			}

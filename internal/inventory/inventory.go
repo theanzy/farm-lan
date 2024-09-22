@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -156,7 +157,7 @@ func NewInventory(assets map[string]crop.StripImg) Inventory {
 				Description: "A cereal grain that yields a fine white flour used chiefly in breads, baked goods, and pastas.",
 				Image:       cropStrip(assets["wheat"], 3),
 			},
-			Quantity: 5,
+			Quantity: 0,
 		}, {
 			Item: Item{
 				Type:        "crop",
@@ -293,20 +294,41 @@ func (i *Inventory) Increase(name string, quantity int) {
 		return x.Name == name
 	})
 	if idx != -1 {
-		i.items[idx].Quantity += quantity
+		item := i.items[idx]
+		item.Quantity += quantity
+		i.items[idx] = item
 	}
 }
 
-func (i *Inventory) Decrease(name string, quantity int) {
+func (i *Inventory) Decrease(name string, quantity int) int {
 	idx := slices.IndexFunc(i.items, func(x InventoryItem) bool {
 		return x.Name == name
 	})
 	if idx != -1 {
-		i.items[idx].Quantity -= quantity
-		if i.items[idx].Quantity <= 0 {
-			i.items[idx].Quantity = 0
+		item := i.items[idx]
+		item.Quantity -= quantity
+		if item.Quantity <= 0 {
+			item.Quantity = 0
+		}
+		i.items[idx] = item
+		return item.Quantity
+	}
+	return -1
+}
+
+func (i *Inventory) AvailableSeeds() []string {
+	res := []string{}
+	for _, item := range i.items {
+		if item.Quantity > 0 && item.Type == "seed" {
+			res = append(res, strings.ToLower(strings.Split(item.Name, " ")[0]))
 		}
 	}
+	return res
+}
+
+func CropToSeedName(cropName string) string {
+	return strings.ToUpper(cropName[0:1]) + cropName[1:] + " seed"
+
 }
 
 func (i *Inventory) Items() []InventoryItem {
@@ -387,18 +409,24 @@ func (ui *InventoryUI) Draw(inventory *Inventory, uiAssets map[string]rl.Texture
 	items := inventory.Items()
 	inventoryIdx := 0
 	padding := ui.padding
+	imgScale := tilescale * 0.5
 	for i, item := range items {
 		rect := InventorySlotRect(ui.container, i, padding, ui.slotsize, ui.colcount)
 		rl.DrawRectangleRec(rect, rl.Brown)
-		tx := rect.X + ui.slotsize*0.5 - float32(item.Image.Width)*tilescale*0.5
-		ty := rect.Y + ui.slotsize*0.5 - float32(item.Image.Height)*tilescale*0.5
-		rl.DrawTextureEx(item.Image, rl.NewVector2(tx, ty), 0, tilescale, rl.White)
+		tx := rect.X + ui.slotsize*0.5 - float32(item.Image.Width)*imgScale*0.5
+		ty := rect.Y + ui.slotsize*0.5 - float32(item.Image.Height)*imgScale*0.5
+		rl.DrawTextureEx(item.Image, rl.NewVector2(tx, ty), 0, imgScale, rl.White)
 		if ui.InventoryId == item.Name {
 			inventoryIdx = i
 			ui.DrawSlotSelection(rect, tilescale, uiAssets, 255)
 		} else if ui.hoverId == item.Name {
 			ui.DrawSlotSelection(rect, tilescale, uiAssets, 100)
 		}
+		// quantity
+		var qfontsize int32 = 15
+		qText := strconv.Itoa(item.Quantity)
+		qWidth := rl.MeasureText(qText, qfontsize) + 5
+		rl.DrawText(qText, int32(rect.X+ui.slotsize)-qWidth, int32(rect.Y+ui.slotsize)-qfontsize, qfontsize, rl.White)
 	}
 	// name
 	descRect := rl.NewRectangle(ui.container.X+padding, ui.container.Y+ui.container.Height-padding-180, ui.container.Width-padding*2, 180)
