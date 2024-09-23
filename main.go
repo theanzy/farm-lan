@@ -10,6 +10,7 @@ import (
 	"github.com/theanzy/farmsim/internal/anim"
 	"github.com/theanzy/farmsim/internal/crop"
 	"github.com/theanzy/farmsim/internal/inventory"
+	"github.com/theanzy/farmsim/internal/strip"
 	"github.com/theanzy/farmsim/internal/tileset"
 	"github.com/theanzy/farmsim/internal/world"
 )
@@ -32,10 +33,61 @@ type FarmTile struct {
 	CropAge int
 }
 
+type Tree struct {
+	State  string
+	Img    strip.StripImg
+	Pos    rl.Vector2
+	Hitbox rl.Rectangle
+	Size   rl.Vector2
+	Center rl.Vector2
+}
+
+func NewTree(img strip.StripImg, cellpos rl.Vector2, tilesize float32, tilescale float32) Tree {
+	size := rl.NewVector2(float32(img.Img.Width/int32(img.StripCount))*tilescale, float32(img.Img.Height)*tilescale)
+	pos := rl.NewVector2(cellpos.X*tilesize, cellpos.Y*tilesize)
+	return Tree{
+		State:  "idle",
+		Img:    img,
+		Pos:    pos,
+		Size:   size,
+		Hitbox: NewTreeHitbox(img, cellpos, tilesize, tilescale),
+		Center: rl.NewVector2(pos.X+size.X/2, pos.Y+size.Y/2),
+	}
+}
+
+func NewTreeHitbox(img strip.StripImg, pos rl.Vector2, tilesize float32, tilescale float32) rl.Rectangle {
+	hitWidth := tilesize * 0.8
+	hitHeight := tilesize * 0.8
+	width := float32(img.Img.Width/int32(img.StripCount)) * tilescale
+	height := float32(img.Img.Height) * tilescale
+	return rl.NewRectangle(
+		pos.X*tilesize+width*0.5-hitWidth*0.5,
+		pos.Y*tilesize+height-hitHeight,
+		hitWidth,
+		hitHeight,
+	)
+}
+
+func (t *Tree) Draw(offset rl.Vector2) {
+	dest := rl.NewRectangle(
+		t.Pos.X-offset.X,
+		t.Pos.Y-offset.Y,
+		t.Size.X,
+		t.Size.Y,
+	)
+	rl.DrawTexturePro(t.Img.Img, t.Img.SrcRects[0], dest, rl.NewVector2(0, 0), 0, rl.White)
+
+	// hitbox := t.Hitbox
+	// hitbox.X -= offset.X
+	// hitbox.Y -= offset.Y
+	// rl.DrawRectangleRec(hitbox, rl.Red)
+}
+
 type Tilemap struct {
 	TileLayers   []map[rl.Vector2]Tile
 	Objects      []Tile
 	Obstacles    map[rl.Vector2]bool
+	Trees        []Tree
 	Beds         map[rl.Vector2]bool
 	tilesetAsset rl.Texture2D
 	Tilesize     int
@@ -45,7 +97,7 @@ type Tilemap struct {
 	Rows         int
 	Roofs        []Tile
 	FarmTiles    map[rl.Vector2]FarmTile
-	CropAssets   map[string]crop.StripImg
+	CropAssets   map[string]strip.StripImg
 	TileScale    int
 }
 
@@ -186,8 +238,13 @@ func (tm *Tilemap) ExtractObjects(objs []string) []Tile {
 }
 
 func (tm *Tilemap) GetObstaclesAround(pos rl.Vector2) []rl.Rectangle {
-	return world.GetTileRectsAround(tm.Obstacles, pos, float32(tm.Tilesize))
+	treeRects := []rl.Rectangle{}
+	for _, t := range tm.Trees {
+		treeRects = append(treeRects, t.Hitbox)
+	}
+	return append(world.GetTileRectsAround(tm.Obstacles, pos, float32(tm.Tilesize)), treeRects...)
 }
+
 func (tm *Tilemap) GetFarmRectsAround(pos rl.Vector2) []rl.Rectangle {
 	return world.GetTileRectsAround(tm.FarmTiles, pos, float32(tm.Tilesize))
 }
@@ -222,20 +279,25 @@ func (tm *Tilemap) GetTiles(tiles []Tile, types []string) []Tile {
 	return res
 }
 
-func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]crop.StripImg, tilesize int) Tilemap {
-	var img = rl.LoadImage("./resources/map/tilesets.png")
+func LoadImgWithScale(imgPath string, scale int32) rl.Texture2D {
+	var img = rl.LoadImage(imgPath)
 	defer rl.UnloadImage(img)
+	rl.ImageResizeNN(img, img.Width*scale, img.Height*scale)
+	return rl.LoadTextureFromImage(img)
+}
+
+func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg, treeAssets map[string]strip.StripImg, tilesize int) Tilemap {
 	scale := tilesize / tmd.TileWidth
-	rl.ImageResizeNN(img, img.Width*int32(scale), img.Height*int32(scale))
 
 	var tm Tilemap
-	tm.tilesetCols = int(img.Width) / tilesize
-	tm.tilesetRows = int(img.Height) / tilesize
+	tm.tilesetAsset = LoadImgWithScale("./resources/map/tilesets.png", int32(scale))
+	tm.Tilesize = tilesize
+	tm.tilesetCols = int(tm.tilesetAsset.Width) / tilesize
+	tm.tilesetRows = int(tm.tilesetAsset.Height) / tilesize
+	tm.Trees = []Tree{}
 	tm.Cols = tmd.Width
 	tm.Rows = tmd.Height
 	tm.TileLayers = []map[rl.Vector2]Tile{}
-	tm.Tilesize = tilesize
-	tm.tilesetAsset = rl.LoadTextureFromImage(img)
 	tm.Obstacles = map[rl.Vector2]bool{}
 	tm.Objects = []Tile{}
 	tm.FarmTiles = map[rl.Vector2]FarmTile{}
@@ -252,6 +314,9 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]crop.StripImg, 
 		z := tileset.LayerGetProp(layer, "z")
 		tiles := map[rl.Vector2]Tile{}
 		for i, id := range layer.Data {
+			if id == 0 {
+				continue
+			}
 			x := i % width
 			y := i / width
 			cellpos := rl.NewVector2(float32(x), float32(y))
@@ -269,8 +334,12 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]crop.StripImg, 
 					CropAge: 0,
 				}
 			}
-			if id == 0 {
-				continue
+			if layer.Name == "tree_real" && id > 0 {
+				if id == 4102 {
+					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_01"], cellpos, float32(tm.Tilesize), float32(tm.TileScale)))
+				} else if id == 4103 {
+					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_02"], cellpos, float32(tm.Tilesize), float32(tm.TileScale)))
+				}
 			}
 
 			if z == -1 {
@@ -594,13 +663,18 @@ func main() {
 	if err != nil {
 		return
 	}
-	defer crop.UnloadCropAssets(cropAssets)
+	defer strip.UnloadMapStripImg(cropAssets)
 
 	uiAssets := LoadUIAsset()
 	defer UnloadTextureMap(uiAssets)
+	treeAssets := map[string]strip.StripImg{
+		"tree_01": strip.NewStripImg(rl.LoadTexture("./resources/elements/Plants/spr_deco_tree_01_strip4.png"), 4),
+		"tree_02": strip.NewStripImg(rl.LoadTexture("./resources/elements/Plants/spr_deco_tree_02_strip4.png"), 4),
+	}
+	defer strip.UnloadMapStripImg(treeAssets)
 
 	tmd, _ := tileset.ParseMap("./resources/map/0.tmj")
-	tm := LoadTilemap(&tmd, cropAssets, 48)
+	tm := LoadTilemap(&tmd, cropAssets, treeAssets, 48)
 	defer tm.Unload()
 
 	const cropTilesetStartId = 691
@@ -658,6 +732,17 @@ func main() {
 			})
 		}
 	}
+	for _, t := range tm.Trees {
+		depthSprites = append(depthSprites, Sprite{
+			Draw: func(offset rl.Vector2, drawRoof bool) {
+				t.Draw(offset)
+			},
+			Center: func() rl.Vector2 {
+				return t.Center
+			},
+		})
+
+	}
 
 	depthSprites = append(depthSprites, Sprite{
 		Draw: func(offset rl.Vector2, drawRoof bool) {
@@ -678,8 +763,8 @@ func main() {
 	transitionCounter := 0.0
 	overlays := []rl.Color{
 		rl.NewColor(255, 255, 255, 0),
-		rl.NewColor(247, 228, 160, 20),
-		rl.NewColor(255, 151, 89, 100),
+		rl.NewColor(247, 228, 160, 30),
+		rl.NewColor(255, 151, 89, 80),
 		rl.NewColor(70, 63, 103, 100),
 		rl.NewColor(4, 26, 54, 150),
 		rl.NewColor(84, 88, 131, 80),
@@ -785,6 +870,7 @@ func main() {
 				}
 			}
 			if rl.IsKeyPressed(rl.KeySpace) {
+				// TODO chop tree
 				hp := player.ToolHitPoint()
 				chp := world.GetCellPos(hp, float64(tm.Tilesize))
 				if ft, ok := GetFullyGrownCrop(chp, tm.FarmTiles, cropAssets); ok {
@@ -900,7 +986,7 @@ func main() {
 	}
 }
 
-func GetFullyGrownCrop(cellpos rl.Vector2, farmTiles map[rl.Vector2]FarmTile, cropAssets map[string]crop.StripImg) (FarmTile, bool) {
+func GetFullyGrownCrop(cellpos rl.Vector2, farmTiles map[rl.Vector2]FarmTile, cropAssets map[string]strip.StripImg) (FarmTile, bool) {
 	if ft, ok := farmTiles[cellpos]; ok {
 		if ca, ok := cropAssets[ft.State]; ok && ft.CropAge >= ca.StripCount {
 			return ft, true

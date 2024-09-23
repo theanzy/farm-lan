@@ -9,28 +9,34 @@
     ],
     "fileStates": {
         "": {
-            "scaleInDock": 1
+            "scaleInDock": 1,
+            "scaleInEditor": 5.5
         },
         "0.tmj": {
-            "scale": 1.5,
-            "selectedLayer": 19,
+            "scale": 3,
+            "selectedLayer": 8,
             "viewCenter": {
-                "x": 817,
-                "y": 353
+                "x": 696.3333333333333,
+                "y": 222.33333333333331
             }
         },
         "0.tmj#plain-color": {
             "scaleInDock": 1
         },
         "0.tmj#tilesets": {
-            "scaleInDock": 1
+            "dynamicWrapping": false,
+            "scaleInDock": 3
+        },
+        "0.tmj#trees": {
+            "dynamicWrapping": true,
+            "scaleInDock": 2
         },
         "tilesets.tsx": {
             "scaleInDock": 1.5,
             "scaleInEditor": 1
         }
     },
-    "last.imagePath": "C:/workspace/go/game/farm-sim/resources/map",
+    "last.imagePath": "C:/workspace/go/game/farm-sim/resources/elements/Plants",
     "map.height": 50,
     "map.lastUsedFormat": "json",
     "map.tileHeight": 16,
@@ -50,5 +56,6 @@
     "tileset.tileSize": {
         "height": 16,
         "width": 16
-    }
+    },
+    "tileset.type": 1
 }

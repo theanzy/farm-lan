@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
-	"github.com/theanzy/farmsim/internal/crop"
+	"github.com/theanzy/farmsim/internal/strip"
 )
 
 type Item struct {
@@ -29,14 +29,14 @@ type Inventory struct {
 	items []InventoryItem
 }
 
-func cropStrip(img crop.StripImg, idx int) rl.Texture2D {
+func cropStrip(img strip.StripImg, idx int) rl.Texture2D {
 	image := rl.LoadImageFromTexture(img.Img)
 	defer rl.UnloadImage(image)
 	rl.ImageCrop(image, img.SrcRects[idx])
 	return rl.LoadTextureFromImage(image)
 }
 
-func NewInventory(assets map[string]crop.StripImg) Inventory {
+func NewInventory(assets map[string]strip.StripImg) Inventory {
 	items := []InventoryItem{
 		{
 			Item: Item{
