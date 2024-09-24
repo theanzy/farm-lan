@@ -41,12 +41,15 @@ type Tree struct {
 	Size          rl.Vector2
 	Center        rl.Vector2
 	frame         float32
+	hunkImg       rl.Texture2D
+	hunkSize      rl.Vector2
 	shakeDuration float32
 }
 
-func NewTree(img strip.StripImg, cellpos rl.Vector2, tilesize float32, tilescale float32) Tree {
+func NewTree(img strip.StripImg, hunkImg rl.Texture2D, cellpos rl.Vector2, tilesize float32, tilescale float32) Tree {
 	size := rl.NewVector2(float32(img.Img.Width/int32(img.StripCount))*tilescale, float32(img.Img.Height)*tilescale)
 	pos := rl.NewVector2(cellpos.X*tilesize, cellpos.Y*tilesize)
+	hunkSize := rl.NewVector2(float32(hunkImg.Width)*tilescale, float32(hunkImg.Height)*tilescale)
 	return Tree{
 		State:         "idle",
 		Img:           img,
@@ -55,6 +58,8 @@ func NewTree(img strip.StripImg, cellpos rl.Vector2, tilesize float32, tilescale
 		Hitbox:        NewTreeHitbox(img, cellpos, tilesize, tilescale),
 		Center:        rl.NewVector2(pos.X+size.X/2, pos.Y+size.Y/2),
 		shakeDuration: 0,
+		hunkImg:       hunkImg,
+		hunkSize:      hunkSize,
 	}
 }
 
@@ -78,7 +83,7 @@ func (t *Tree) Update(dt float32) {
 			t.shakeDuration = 0
 			t.State = "dead"
 		} else {
-			t.frame += dt * 4
+			t.frame += dt * 5
 			if t.frame >= float32(t.Img.StripCount) {
 				t.frame = 0
 			}
@@ -94,6 +99,12 @@ func (t *Tree) Shake(duration float32) {
 
 func (t *Tree) Draw(offset rl.Vector2) {
 	if t.State == "dead" {
+		hunkSize := t.hunkSize
+		x := t.Pos.X + t.Size.X*0.5 - hunkSize.X*0.5 - offset.X
+		y := t.Pos.Y + t.Size.Y - hunkSize.Y - offset.Y
+		src := rl.NewRectangle(0, 0, float32(t.hunkImg.Width), float32(t.hunkImg.Height))
+		dest := rl.NewRectangle(x, y, hunkSize.X, hunkSize.Y)
+		rl.DrawTexturePro(t.hunkImg, src, dest, rl.NewVector2(0, 0), 0, rl.White)
 		return
 	}
 	dest := rl.NewRectangle(
@@ -320,7 +331,7 @@ func LoadImgWithScale(imgPath string, scale int32) rl.Texture2D {
 	return rl.LoadTextureFromImage(img)
 }
 
-func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg, treeAssets map[string]strip.StripImg, tilesize int) Tilemap {
+func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg, treeAssets map[string]strip.StripImg, treeHunkImg rl.Texture2D, tilesize int) Tilemap {
 	scale := tilesize / tmd.TileWidth
 
 	var tm Tilemap
@@ -370,9 +381,9 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 			}
 			if layer.Name == "tree_real" && id > 0 {
 				if id == 4102 {
-					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_01"], cellpos, float32(tm.Tilesize), float32(tm.TileScale)))
+					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_01"], treeHunkImg, cellpos, float32(tm.Tilesize), float32(tm.TileScale)))
 				} else if id == 4103 {
-					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_02"], cellpos, float32(tm.Tilesize), float32(tm.TileScale)))
+					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_02"], treeHunkImg, cellpos, float32(tm.Tilesize), float32(tm.TileScale)))
 				}
 			}
 
@@ -706,9 +717,11 @@ func main() {
 		"tree_02": strip.NewStripImg(rl.LoadTexture("./resources/elements/Plants/spr_deco_tree_02_strip4.png"), 4),
 	}
 	defer strip.UnloadMapStripImg(treeAssets)
+	treeHunkImg := rl.LoadTexture("./resources/elements/Plants/tree_hunk.png")
+	defer rl.UnloadTexture(treeHunkImg)
 
 	tmd, _ := tileset.ParseMap("./resources/map/0.tmj")
-	tm := LoadTilemap(&tmd, cropAssets, treeAssets, 48)
+	tm := LoadTilemap(&tmd, cropAssets, treeAssets, treeHunkImg, 48)
 	defer tm.Unload()
 
 	const cropTilesetStartId = 691
@@ -875,14 +888,14 @@ func main() {
 						tm.AddWetTile(player.ToolHitPoint())
 					}
 				} else if player.Tool == "axe" {
-					if idx := GetCollidedTreeIdx(tm.Trees, player.ToolHitPoint()); idx != -1 && tm.Trees[idx].State != "shaking" {
+					if idx := GetCollidedTreeIdx(tm.Trees, player.ToolHitPoint()); idx != -1 && tm.Trees[idx].State == "idle" {
 						var duration float32 = 500
 						player.UseTool(duration)
 						tree := tm.Trees[idx]
 						tree.Shake(duration)
 						tm.Trees[idx] = tree
 						// TODO add woods
-						// TODO show tree hunk left
+						// TODO reset tree after 3 days
 					}
 				}
 			}
