@@ -44,9 +44,10 @@ type Tree struct {
 	hunkImg       rl.Texture2D
 	hunkSize      rl.Vector2
 	shakeDuration float32
+	WoodCount     int
 }
 
-func NewTree(img strip.StripImg, hunkImg rl.Texture2D, cellpos rl.Vector2, tilesize float32, tilescale float32) Tree {
+func NewTree(img strip.StripImg, hunkImg rl.Texture2D, cellpos rl.Vector2, tilesize float32, tilescale float32, woodcount int) Tree {
 	size := rl.NewVector2(float32(img.Img.Width/int32(img.StripCount))*tilescale, float32(img.Img.Height)*tilescale)
 	pos := rl.NewVector2(cellpos.X*tilesize, cellpos.Y*tilesize)
 	hunkSize := rl.NewVector2(float32(hunkImg.Width)*tilescale, float32(hunkImg.Height)*tilescale)
@@ -60,6 +61,7 @@ func NewTree(img strip.StripImg, hunkImg rl.Texture2D, cellpos rl.Vector2, tiles
 		shakeDuration: 0,
 		hunkImg:       hunkImg,
 		hunkSize:      hunkSize,
+		WoodCount:     woodcount,
 	}
 }
 
@@ -381,9 +383,9 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 			}
 			if layer.Name == "tree_real" && id > 0 {
 				if id == 4102 {
-					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_01"], treeHunkImg, cellpos, float32(tm.Tilesize), float32(tm.TileScale)))
+					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_01"], treeHunkImg, cellpos, float32(tm.Tilesize), float32(tm.TileScale), 5))
 				} else if id == 4103 {
-					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_02"], treeHunkImg, cellpos, float32(tm.Tilesize), float32(tm.TileScale)))
+					tm.Trees = append(tm.Trees, NewTree(treeAssets["tree_02"], treeHunkImg, cellpos, float32(tm.Tilesize), float32(tm.TileScale), 2))
 				}
 			}
 
@@ -704,7 +706,7 @@ func main() {
 
 	// tileset id
 	var crops = []string{"carrot", "cauliflower", "pumpkin", "sunflower", "radish", "parsnip", "potato", "cabbage", "beetroot", "wheat", "kale"}
-	cropAssets, err := crop.LoadCropAssets("./resources/elements/Crops", append(crops, "soil"))
+	cropAssets, err := crop.LoadCropAssets("./resources/elements/Crops", append(crops, "soil", "wood"))
 	if err != nil {
 		return
 	}
@@ -894,7 +896,7 @@ func main() {
 						tree := tm.Trees[idx]
 						tree.Shake(duration)
 						tm.Trees[idx] = tree
-						// TODO add woods
+						playerInventory.Increase("Wood", tree.WoodCount)
 						// TODO reset tree after 3 days
 					}
 				}

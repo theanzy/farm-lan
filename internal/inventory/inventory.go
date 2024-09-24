@@ -279,6 +279,17 @@ func NewInventory(assets map[string]strip.StripImg) Inventory {
 			},
 			Quantity: 5,
 		},
+		{
+			Item: Item{
+				Type:        "wood",
+				BuyPrice:    15,
+				SellPrice:   12,
+				Name:        "Wood",
+				Description: "Used for building",
+				Image:       cropStrip(assets["wood"], 0),
+			},
+			Quantity: 1,
+		},
 	}
 	return Inventory{items: items}
 }
@@ -404,7 +415,7 @@ func (ui *InventoryUI) Draw(inventory *Inventory, uiAssets map[string]rl.Texture
 	items := inventory.Items()
 	inventoryIdx := 0
 	padding := ui.padding
-	imgScale := tilescale * 0.5
+	imgScale := tilescale * 0.8
 	for i, item := range items {
 		rect := InventorySlotRect(ui.container, i, padding, ui.slotsize, ui.colcount)
 		rl.DrawRectangleRec(rect, rl.Brown)
