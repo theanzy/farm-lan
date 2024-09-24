@@ -34,24 +34,27 @@ type FarmTile struct {
 }
 
 type Tree struct {
-	State  string
-	Img    strip.StripImg
-	Pos    rl.Vector2
-	Hitbox rl.Rectangle
-	Size   rl.Vector2
-	Center rl.Vector2
+	State         string
+	Img           strip.StripImg
+	Pos           rl.Vector2
+	Hitbox        rl.Rectangle
+	Size          rl.Vector2
+	Center        rl.Vector2
+	frame         float32
+	shakeDuration float32
 }
 
 func NewTree(img strip.StripImg, cellpos rl.Vector2, tilesize float32, tilescale float32) Tree {
 	size := rl.NewVector2(float32(img.Img.Width/int32(img.StripCount))*tilescale, float32(img.Img.Height)*tilescale)
 	pos := rl.NewVector2(cellpos.X*tilesize, cellpos.Y*tilesize)
 	return Tree{
-		State:  "idle",
-		Img:    img,
-		Pos:    pos,
-		Size:   size,
-		Hitbox: NewTreeHitbox(img, cellpos, tilesize, tilescale),
-		Center: rl.NewVector2(pos.X+size.X/2, pos.Y+size.Y/2),
+		State:         "idle",
+		Img:           img,
+		Pos:           pos,
+		Size:          size,
+		Hitbox:        NewTreeHitbox(img, cellpos, tilesize, tilescale),
+		Center:        rl.NewVector2(pos.X+size.X/2, pos.Y+size.Y/2),
+		shakeDuration: 0,
 	}
 }
 
@@ -68,14 +71,39 @@ func NewTreeHitbox(img strip.StripImg, pos rl.Vector2, tilesize float32, tilesca
 	)
 }
 
+func (t *Tree) Update(dt float32) {
+	if t.State == "shaking" {
+		t.shakeDuration -= 100 * dt
+		if t.shakeDuration <= 0 {
+			t.shakeDuration = 0
+			t.State = "dead"
+		} else {
+			t.frame += dt * 4
+			if t.frame >= float32(t.Img.StripCount) {
+				t.frame = 0
+			}
+		}
+
+	}
+}
+
+func (t *Tree) Shake(duration float32) {
+	t.State = "shaking"
+	t.shakeDuration = duration
+}
+
 func (t *Tree) Draw(offset rl.Vector2) {
+	if t.State == "dead" {
+		return
+	}
 	dest := rl.NewRectangle(
 		t.Pos.X-offset.X,
 		t.Pos.Y-offset.Y,
 		t.Size.X,
 		t.Size.Y,
 	)
-	rl.DrawTexturePro(t.Img.Img, t.Img.SrcRects[0], dest, rl.NewVector2(0, 0), 0, rl.White)
+	x := int(math.Floor(float64(t.frame)))
+	rl.DrawTexturePro(t.Img.Img, t.Img.SrcRects[x], dest, rl.NewVector2(0, 0), 0, rl.White)
 
 	// hitbox := t.Hitbox
 	// hitbox.X -= offset.X
@@ -279,6 +307,12 @@ func (tm *Tilemap) GetTiles(tiles []Tile, types []string) []Tile {
 	return res
 }
 
+func GetCollidedTreeIdx(trees []Tree, hitpoint rl.Vector2) int {
+	return slices.IndexFunc(trees, func(t Tree) bool {
+		return rl.CheckCollisionPointRec(hitpoint, t.Hitbox)
+	})
+}
+
 func LoadImgWithScale(imgPath string, scale int32) rl.Texture2D {
 	var img = rl.LoadImage(imgPath)
 	defer rl.UnloadImage(img)
@@ -480,11 +514,11 @@ func (p *Player) SwitchTool() {
 	p.Tool = p.Tools[idx]
 }
 
-func (p *Player) UseTool() {
+func (p *Player) UseTool(duration float32) {
 	if p.ToolCounter > 0 {
 		return
 	}
-	p.ToolCounter = 200
+	p.ToolCounter = duration
 }
 
 func (p *Player) Center() rl.Vector2 {
@@ -732,13 +766,13 @@ func main() {
 			})
 		}
 	}
-	for _, t := range tm.Trees {
+	for i := range tm.Trees {
 		depthSprites = append(depthSprites, Sprite{
 			Draw: func(offset rl.Vector2, drawRoof bool) {
-				t.Draw(offset)
+				tm.Trees[i].Draw(offset)
 			},
 			Center: func() rl.Vector2 {
-				return t.Center
+				return tm.Trees[i].Center
 			},
 		})
 
@@ -827,7 +861,7 @@ func main() {
 						r := rects[idx]
 						p := world.GetCellPos(rl.NewVector2(r.X, r.Y), float64(tm.Tilesize))
 						if ft, ok := tm.FarmTiles[p]; ok && ft.State == "empty" {
-							player.UseTool()
+							player.UseTool(300)
 						}
 					}
 				} else if player.Tool == "water" {
@@ -837,8 +871,18 @@ func main() {
 						return rl.CheckCollisionCircleRec(hp, 5, r)
 					})
 					if idx != -1 {
-						player.UseTool()
+						player.UseTool(100)
 						tm.AddWetTile(player.ToolHitPoint())
+					}
+				} else if player.Tool == "axe" {
+					if idx := GetCollidedTreeIdx(tm.Trees, player.ToolHitPoint()); idx != -1 && tm.Trees[idx].State != "shaking" {
+						var duration float32 = 500
+						player.UseTool(duration)
+						tree := tm.Trees[idx]
+						tree.Shake(duration)
+						tm.Trees[idx] = tree
+						// TODO add woods
+						// TODO show tree hunk left
 					}
 				}
 			}
@@ -870,7 +914,6 @@ func main() {
 				}
 			}
 			if rl.IsKeyPressed(rl.KeySpace) {
-				// TODO chop tree
 				hp := player.ToolHitPoint()
 				chp := world.GetCellPos(hp, float64(tm.Tilesize))
 				if ft, ok := GetFullyGrownCrop(chp, tm.FarmTiles, cropAssets); ok {
@@ -928,6 +971,10 @@ func main() {
 		camScroll.X += dCamScroll.X * dt
 		camScroll.Y += dCamScroll.Y * dt
 		player.Update(dt, rl.NewVector2(playerMoveX[1]-playerMoveX[0], playerMoveY[1]-playerMoveY[0]), tm.GetObstaclesAround, tm.AddFarmHole)
+		for i, t := range tm.Trees {
+			t.Update(dt)
+			tm.Trees[i] = t
+		}
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)
