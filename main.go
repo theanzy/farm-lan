@@ -10,6 +10,7 @@ import (
 	"github.com/theanzy/farmsim/internal/anim"
 	"github.com/theanzy/farmsim/internal/crop"
 	"github.com/theanzy/farmsim/internal/inventory"
+	"github.com/theanzy/farmsim/internal/render"
 	"github.com/theanzy/farmsim/internal/strip"
 	"github.com/theanzy/farmsim/internal/tileset"
 	"github.com/theanzy/farmsim/internal/world"
@@ -642,20 +643,6 @@ func (p *Player) Hitbox(offset rl.Vector2) rl.Rectangle {
 	return rl.NewRectangle(p.Pos.X+p.HitAreaOffset.X-offset.X, p.Pos.Y+p.HitAreaOffset.Y-offset.Y, p.HitAreaOffset.Width, p.HitAreaOffset.Height)
 }
 
-type Sprite struct {
-	Draw   func(offset rl.Vector2, drawRoof bool)
-	Center func() rl.Vector2
-}
-
-func DrawDepth(offset rl.Vector2, sprites []Sprite, drawRoof bool) {
-	slices.SortStableFunc(sprites, func(a Sprite, b Sprite) int {
-		return int(a.Center().Y - b.Center().Y)
-	})
-	for _, sprite := range sprites {
-		sprite.Draw(offset, drawRoof)
-	}
-}
-
 func LoadToolUIAsset() map[string]rl.Texture2D {
 	res := map[string]rl.Texture2D{}
 	res["axe"] = rl.LoadTexture("./resources/UI/axe.png")
@@ -745,11 +732,10 @@ func main() {
 		"shorthair",
 	)
 
-	depthSprites := []Sprite{}
-
+	depthRenderer := render.NewDepthRenderer(20)
 	for _, t := range tm.Objects {
 		if t.Type != "house_walls" {
-			depthSprites = append(depthSprites, Sprite{
+			depthRenderer.Sprites = append(depthRenderer.Sprites, render.Sprite{
 				Draw: func(offset rl.Vector2, drawRoof bool) {
 					tm.DrawTile(t, offset)
 				},
@@ -764,7 +750,7 @@ func main() {
 		}
 	}
 	for i := range tm.Trees {
-		depthSprites = append(depthSprites, Sprite{
+		depthRenderer.Sprites = append(depthRenderer.Sprites, render.Sprite{
 			Draw: func(offset rl.Vector2, drawRoof bool) {
 				tm.Trees[i].Draw(offset)
 			},
@@ -775,7 +761,7 @@ func main() {
 
 	}
 
-	depthSprites = append(depthSprites, Sprite{
+	depthRenderer.Sprites = append(depthRenderer.Sprites, render.Sprite{
 		Draw: func(offset rl.Vector2, drawRoof bool) {
 			player.Draw(offset)
 		},
@@ -972,6 +958,7 @@ func main() {
 			t.Update(dt)
 			tm.Trees[i] = t
 		}
+		depthRenderer.Update()
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)
@@ -999,7 +986,7 @@ func main() {
 			}
 		}
 
-		DrawDepth(camScroll, depthSprites, true)
+		depthRenderer.Draw(camScroll, true)
 		if player.ToolCounter > 0 {
 			player.DrawTool(camScroll)
 		}
