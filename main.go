@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	rand "math/rand/v2"
 	"slices"
 	"sort"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/theanzy/farmsim/internal/crop"
 	"github.com/theanzy/farmsim/internal/inventory"
 	"github.com/theanzy/farmsim/internal/render"
+	"github.com/theanzy/farmsim/internal/sfx"
 	"github.com/theanzy/farmsim/internal/strip"
 	"github.com/theanzy/farmsim/internal/tileset"
 	"github.com/theanzy/farmsim/internal/world"
@@ -680,6 +682,7 @@ func main() {
 		return
 	}
 	defer strip.UnloadMapStripImg(cropAssets)
+	woodDropSfx := sfx.NewItemDrop(cropAssets["wood"].Img, 50)
 
 	uiAssets := LoadUIAsset()
 	defer UnloadTextureMap(uiAssets)
@@ -858,14 +861,14 @@ func main() {
 						tm.AddWetTile(player.ToolHitPoint())
 					}
 				} else if player.Tool == "axe" {
-					if idx := GetCollidedTreeIdx(tm.Trees, player.ToolHitPoint()); idx != -1 && tm.Trees[idx].State == "idle" {
+					hp := player.ToolHitPoint()
+					if idx := GetCollidedTreeIdx(tm.Trees, hp); idx != -1 && tm.Trees[idx].State == "idle" {
 						var duration float32 = 500
 						player.UseTool(duration)
 						tree := tm.Trees[idx]
 						tree.Shake(duration)
 						tm.Trees[idx] = tree
 						playerInventory.Increase("Wood", tree.WoodCount)
-						// TODO reset tree after 3 days
 					}
 				}
 			}
@@ -904,7 +907,8 @@ func main() {
 					ft.State = "digged"
 					ft.CropAge = 0
 					tm.FarmTiles[ft.Pos] = ft
-					// TODO add sfx
+					// TODO add sfx for harvest
+
 				} else if _, ok := tm.Beds[chp]; ok {
 					day += 1
 					// start transition. block all inputs
@@ -955,9 +959,18 @@ func main() {
 		camScroll.Y += dCamScroll.Y * dt
 		player.Update(dt, rl.NewVector2(playerMoveX[1]-playerMoveX[0], playerMoveY[1]-playerMoveY[0]), tm.GetObstaclesAround, tm.AddFarmHole)
 		for i, t := range tm.Trees {
+			prevState := t.State
 			t.Update(dt)
 			tm.Trees[i] = t
+			if prevState == "shaking" && t.State == "dead" {
+				woodDropSfx.Start(
+					rl.NewVector2(t.Pos.X+t.Size.X/2, t.Pos.Y+t.Size.Y/2),
+					7,
+					rl.Vector2Normalize(rl.NewVector2(rand.Float32()*2-1, rand.Float32()*2-1)),
+				)
+			}
 		}
+		woodDropSfx.Update(dt)
 		depthRenderer.Update()
 
 		rl.BeginDrawing()
@@ -1009,6 +1022,7 @@ func main() {
 			rl.DrawRectangle(0, 0, WIDTH, HEIGHT, rl.NewColor(0, 0, 0, uint8(transitionCounter)))
 		}
 
+		woodDropSfx.Draw(camScroll, float32(tm.TileScale))
 		// draw inventory
 		if showInventory {
 			inventoryUI.Draw(&playerInventory, uiAssets, float32(tm.TileScale))
