@@ -425,75 +425,57 @@ type Player struct {
 	Size            rl.Vector2
 	AnimStyles      anim.AnimStyles
 	AnimState       string
-	BaseAnimations  map[string]anim.Animation
-	ToolAnimations  map[string]anim.Animation
-	StyleAnimations map[string]anim.Animation
+	BaseAnimations  map[string]anim.StripAnimation
+	ToolAnimations  map[string]anim.StripAnimation
+	StyleAnimations map[string]anim.StripAnimation
 	Flipped         bool
 	Tool            string
 	Tools           []string
 	ToolCounter     float32
 }
 
-func GetSrcRects(stripCount int, imgSize rl.Vector2) ([]rl.Rectangle, []rl.Rectangle) {
-	original := []rl.Rectangle{}
-	flipped := []rl.Rectangle{}
-	for i := range stripCount {
-		original = append(original, rl.NewRectangle(float32(i)*imgSize.X, 0, imgSize.X, imgSize.Y))
-		flipped = append(flipped, rl.NewRectangle(float32(i)*imgSize.X, imgSize.Y, imgSize.X, imgSize.Y))
-	}
-	return original, flipped
-}
-
 func NewPlayer(pos rl.Vector2, tilesize int, scale int, animStyles anim.AnimStyles, tools []string, style string) Player {
 	playerImg := animStyles["IDLE"].Base
-	stripCount := animStyles["IDLE"].StripCount
-
-	assetSize := rl.NewVector2(float32(playerImg.Width)/float32(stripCount), float32(playerImg.Height)/2)
-	size := rl.NewVector2(float32(assetSize.X)*float32(scale), float32(assetSize.Y)*float32(scale))
+	assetSize := rl.NewVector2(
+		float32(playerImg.Width)/float32(animStyles["IDLE"].StripCount),
+		float32(playerImg.Height)/2,
+	)
+	size := rl.NewVector2(
+		float32(assetSize.X)*float32(scale),
+		float32(assetSize.Y)*float32(scale),
+	)
 
 	hitboxSize := assetSize.X * 0.4
 
 	hitRect := rl.NewRectangle(size.X/2-hitboxSize/2, size.Y/2-hitboxSize/2, hitboxSize, hitboxSize)
 
-	baseAnimations := map[string]anim.Animation{}
-	toolAnimations := map[string]anim.Animation{}
-	styleAnimations := map[string]anim.Animation{}
+	baseAnimations := map[string]anim.StripAnimation{}
+	toolAnimations := map[string]anim.StripAnimation{}
+	styleAnimations := map[string]anim.StripAnimation{}
 	animSpeed := 12
 	for a, animStyle := range animStyles {
-		baseSrcRects, baseSrcRectsFlipped := GetSrcRects(animStyle.StripCount, assetSize)
-		baseAnimations[a] = anim.Animation{
-			Image:          animStyle.Base,
-			AssetSize:      assetSize,
-			X:              0,
-			Speed:          float32(animSpeed),
-			StripCount:     float32(animStyle.StripCount),
-			SrcRects:       baseSrcRects,
-			SrcRectFlipped: baseSrcRectsFlipped,
-		}
+		baseAnimations[a] = anim.NewStripAnimation(
+			animStyle.Base,
+			assetSize,
+			float32(animSpeed),
+			float32(animStyle.StripCount),
+		)
 
 		if v, ok := animStyle.Variants[style]; ok {
-			srcRects, srcRectsFlipped := GetSrcRects(animStyle.StripCount, assetSize)
-			styleAnimations[a] = anim.Animation{
-				Image:          v,
-				AssetSize:      assetSize,
-				X:              0,
-				Speed:          float32(animSpeed),
-				StripCount:     float32(animStyle.StripCount),
-				SrcRects:       srcRects,
-				SrcRectFlipped: srcRectsFlipped,
-			}
+			styleAnimations[a] = anim.NewStripAnimation(
+				v,
+				assetSize,
+				float32(animSpeed),
+				float32(animStyle.StripCount),
+			)
 		}
 		if v, ok := animStyle.Variants["tools"]; ok {
-			srcRects, srcRectsFlipped := GetSrcRects(animStyle.StripCount, assetSize)
-			toolAnimations[a] = anim.Animation{
-				Image:          v,
-				AssetSize:      assetSize,
-				X:              0,
-				Speed:          float32(animSpeed),
-				StripCount:     float32(animStyle.StripCount),
-				SrcRects:       srcRects,
-				SrcRectFlipped: srcRectsFlipped,
-			}
+			toolAnimations[a] = anim.NewStripAnimation(
+				v,
+				assetSize,
+				float32(animSpeed),
+				float32(animStyle.StripCount),
+			)
 		}
 	}
 
