@@ -773,8 +773,10 @@ func main() {
 		},
 	})
 
-	playerInventory := inventory.NewInventory(cropAssets)
-	defer playerInventory.DeinitInventory()
+	allItems := inventory.LoadItems(cropAssets)
+	defer inventory.UnloadItems(allItems)
+
+	playerInventory := inventory.NewInventory(allItems)
 	inventoryUI := inventory.NewInventoryUI(WIDTH, HEIGHT, float32(tm.Tilesize))
 	showInventory := false
 

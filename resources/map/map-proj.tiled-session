@@ -13,11 +13,11 @@
             "scaleInEditor": 5.5
         },
         "0.tmj": {
-            "scale": 2,
+            "scale": 1,
             "selectedLayer": 21,
             "viewCenter": {
-                "x": 834.5,
-                "y": 259.5
+                "x": 738,
+                "y": 206
             }
         },
         "0.tmj#plain-color": {
