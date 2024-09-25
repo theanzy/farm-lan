@@ -10,7 +10,7 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/theanzy/farmsim/internal/anim"
 	"github.com/theanzy/farmsim/internal/crop"
-	"github.com/theanzy/farmsim/internal/inventory"
+	"github.com/theanzy/farmsim/internal/items"
 	"github.com/theanzy/farmsim/internal/render"
 	"github.com/theanzy/farmsim/internal/sfx"
 	"github.com/theanzy/farmsim/internal/strip"
@@ -773,11 +773,11 @@ func main() {
 		},
 	})
 
-	allItems := inventory.LoadItems(cropAssets)
-	defer inventory.UnloadItems(allItems)
+	allItems := items.LoadItems(cropAssets)
+	defer items.UnloadItems(allItems)
 
-	playerInventory := inventory.NewInventory(allItems)
-	inventoryUI := inventory.NewInventoryUI(WIDTH, HEIGHT, float32(tm.Tilesize))
+	playerInventory := items.NewInventory(allItems)
+	inventoryUI := items.NewInventoryUI(WIDTH, HEIGHT, float32(tm.Tilesize))
 	showInventory := false
 
 	var camScroll = rl.NewVector2(0, 0)
@@ -892,7 +892,7 @@ func main() {
 					if ft, ok := tm.FarmTiles[cp]; ok && ft.State == "digged" {
 						ft.State = currentSeed
 						tm.FarmTiles[cp] = ft
-						if q := playerInventory.Decrease(inventory.CropToSeedName(currentSeed), 1); q == 0 {
+						if q := playerInventory.Decrease(items.CropToSeedName(currentSeed), 1); q == 0 {
 							seeds := playerInventory.AvailableSeeds()
 							if len(seeds) > 0 {
 								currentSeed = playerInventory.AvailableSeeds()[0]
@@ -905,7 +905,7 @@ func main() {
 				hp := player.ToolHitPoint()
 				chp := world.GetCellPos(hp, float64(tm.Tilesize))
 				if ft, ok := GetFullyGrownCrop(chp, tm.FarmTiles, cropAssets); ok {
-					playerInventory.Increase(inventory.CropToCropName(ft.State), 1)
+					playerInventory.Increase(items.CropToCropName(ft.State), 1)
 					ft.State = "digged"
 					ft.CropAge = 0
 					tm.FarmTiles[ft.Pos] = ft
