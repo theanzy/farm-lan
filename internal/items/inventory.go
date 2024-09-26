@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
 	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -106,7 +105,7 @@ func NewInventoryUI(screenWidth float32, screenHeight float32, tilesize float32)
 
 func (ui *InventoryUI) ItemClick(inventory *Inventory, mpos rl.Vector2) {
 	for i, item := range inventory.Items() {
-		irect := ItemSlotRect(ui.container, i, ui.padding, ui.slotsize, ui.colcount)
+		irect := itemSlotRect(ui.container, i, ui.padding, ui.slotsize, ui.colcount)
 		if rl.CheckCollisionPointRec(mpos, irect) {
 			ui.InventoryId = item.Name
 		}
@@ -116,7 +115,7 @@ func (ui *InventoryUI) ItemClick(inventory *Inventory, mpos rl.Vector2) {
 func (ui *InventoryUI) ItemHover(inventory *Inventory, mpos rl.Vector2) {
 	hovered := false
 	for i, item := range inventory.Items() {
-		irect := ItemSlotRect(ui.container, i, ui.padding, ui.slotsize, ui.colcount)
+		irect := itemSlotRect(ui.container, i, ui.padding, ui.slotsize, ui.colcount)
 		if rl.CheckCollisionPointRec(mpos, irect) && item.Name != ui.InventoryId {
 			hovered = true
 			ui.hoverId = item.Name
@@ -127,85 +126,56 @@ func (ui *InventoryUI) ItemHover(inventory *Inventory, mpos rl.Vector2) {
 	}
 }
 
-func (ui *InventoryUI) DrawSlotSelection(rect rl.Rectangle, tilescale float32, uiAssets map[string]rl.Texture2D, alpha uint8) {
-	shift := ui.slotsize * 0.25
-	stl := rl.NewVector2(rect.X-shift, rect.Y-shift)
-	str := rl.NewVector2(rect.X+ui.slotsize-shift, rect.Y-shift)
-	sbl := rl.NewVector2(rect.X-shift, rect.Y+ui.slotsize-shift)
-	sbr := rl.NewVector2(rect.X+ui.slotsize-shift, rect.Y+ui.slotsize-shift)
-	tint := rl.NewColor(255, 255, 255, alpha)
-	rl.DrawTextureEx(uiAssets["selectbox_tl"], stl, 0, tilescale, tint)
-	rl.DrawTextureEx(uiAssets["selectbox_tr"], str, 0, tilescale, tint)
-	rl.DrawTextureEx(uiAssets["selectbox_br"], sbr, 0, tilescale, tint)
-	rl.DrawTextureEx(uiAssets["selectbox_bl"], sbl, 0, tilescale, tint)
-}
-
 func (ui *InventoryUI) Draw(inventory *Inventory, uiAssets map[string]rl.Texture2D, tilescale float32) {
+	lineColor := rl.NewColor(rl.Beige.R-20, rl.Beige.G-20, rl.Beige.B-20, 255)
 	rl.DrawRectangleRec(ui.container, rl.Beige)
+	rl.DrawRectangleLinesEx(ui.container, 2, lineColor)
 	rl.DrawText("Inventory", int32(ui.container.X)+20, int32(ui.container.Y)+10, 30, rl.White)
 	items := inventory.Items()
-	inventoryIdx := 0
+	inventoryIdx := -1
 	padding := ui.padding
-	imgScale := tilescale * 0.8
+	imgScale := tilescale
 	for i, item := range items {
-		rect := ItemSlotRect(ui.container, i, padding, ui.slotsize, ui.colcount)
-		rl.DrawRectangleRec(rect, rl.Brown)
-		tx := rect.X + ui.slotsize*0.5 - float32(item.Image.Width)*imgScale*0.5
-		ty := rect.Y + ui.slotsize*0.5 - float32(item.Image.Height)*imgScale*0.5
-		rl.DrawTextureEx(item.Image, rl.NewVector2(tx, ty), 0, imgScale, rl.White)
+		rect := itemSlotRect(ui.container, i, padding, ui.slotsize, ui.colcount)
+		DrawItem(rect, item.Image, imgScale, item.Quantity)
 		if ui.InventoryId == item.Name {
 			inventoryIdx = i
-			ui.DrawSlotSelection(rect, tilescale, uiAssets, 255)
+			drawSlotSelection(rect, tilescale, uiAssets, 255)
 		} else if ui.hoverId == item.Name {
-			ui.DrawSlotSelection(rect, tilescale, uiAssets, 100)
+			drawSlotSelection(rect, tilescale, uiAssets, 100)
 		}
-		// quantity
-		var qfontsize int32 = 15
-		qText := strconv.Itoa(item.Quantity)
-		qWidth := rl.MeasureText(qText, qfontsize) + 5
-		rl.DrawText(qText, int32(rect.X+ui.slotsize)-qWidth, int32(rect.Y+ui.slotsize)-qfontsize, qfontsize, rl.White)
 	}
-	// name
-	descRect := rl.NewRectangle(ui.container.X+padding, ui.container.Y+ui.container.Height-padding-180, ui.container.Width-padding*2, 180)
-	rl.DrawRectangleRec(descRect, rl.White)
-	rl.DrawText(items[inventoryIdx].Name, int32(descRect.X+padding), int32(descRect.Y+padding*0.5), 25, rl.Black)
+	if inventoryIdx >= 0 {
 
-	// price
-	priceText := fmt.Sprintf("$%d", items[inventoryIdx].SellPrice)
-	priceTextW := rl.MeasureText(priceText, 25)
-	rl.DrawText(priceText, int32(descRect.X+descRect.Width-padding-float32(priceTextW)), int32(descRect.Y+padding*0.5), 25, rl.DarkGray)
+		// name
+		descRect := rl.NewRectangle(ui.container.X+padding, ui.container.Y+ui.container.Height-padding-180, ui.container.Width-padding*2, 180)
+		rl.DrawRectangleRec(descRect, rl.White)
+		rl.DrawText(items[inventoryIdx].Name, int32(descRect.X+padding), int32(descRect.Y+padding*0.5), 25, rl.Black)
 
-	// description
-	desc := items[inventoryIdx].Description
-	words := strings.Split(desc, " ")
-	fontsize := 20
-	descWidth := rl.MeasureText(desc, int32(fontsize))
-	if descWidth > int32(descRect.Width-padding*2) {
-		gap := 10
-		rl.DrawText(strings.Join(words[0:gap], " "), int32(descRect.X+padding), int32(descRect.Y+padding*2), int32(fontsize), rl.Gray)
-		i := 0
-		h := 3
-		for {
-			start := i + gap
-			end := start + gap
-			breaking := false
-			if len(words) < start {
-				start = len(words)
+		// price
+		priceText := fmt.Sprintf("$%d", items[inventoryIdx].SellPrice)
+		priceTextW := rl.MeasureText(priceText, 25)
+		rl.DrawText(priceText, int32(descRect.X+descRect.Width-padding-float32(priceTextW)), int32(descRect.Y+padding*0.5), 25, rl.DarkGray)
+
+		// description
+		desc := items[inventoryIdx].Description
+		words := strings.Split(desc, " ")
+		var fontsize int32 = 20
+		startX := 0
+		endX := 0
+		y := 0
+		startY := descRect.Y + padding*2
+		maxWidth := int32(descRect.Width - 6*padding)
+		for endX < len(words) {
+			line := strings.Join(words[startX:endX+1], " ")
+			w := rl.MeasureText(line, fontsize)
+			if endX >= len(words)-1 || w >= maxWidth {
+				rl.DrawText(line, int32(descRect.X+padding), int32(startY)+int32(y)*fontsize+int32(y)*8, fontsize, rl.Gray)
+				startX = endX + 1
+				y += 1
 			}
-			if len(words) < end {
-				end = len(words)
-				breaking = true
-			}
-			w := strings.Join(words[start:end], " ")
-			rl.DrawText(w, int32(descRect.X+padding), int32(descRect.Y+padding*float32(h)), int32(fontsize), rl.Gray)
-			i += gap
-			h += 1
-			if breaking {
-				break
-			}
+			endX += 1
 		}
 
-	} else {
-		rl.DrawText(desc, int32(descRect.X+padding), int32(descRect.Y+padding*2), int32(fontsize), rl.Gray)
 	}
 }

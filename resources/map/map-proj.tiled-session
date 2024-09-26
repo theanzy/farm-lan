@@ -13,11 +13,11 @@
             "scaleInEditor": 5.5
         },
         "0.tmj": {
-            "scale": 1,
+            "scale": 3,
             "selectedLayer": 21,
             "viewCenter": {
-                "x": 738,
-                "y": 206
+                "x": 652.5,
+                "y": 241.33333333333331
             }
         },
         "0.tmj#plain-color": {
@@ -25,7 +25,7 @@
         },
         "0.tmj#tilesets": {
             "dynamicWrapping": false,
-            "scaleInDock": 3
+            "scaleInDock": 2
         },
         "0.tmj#trees": {
             "dynamicWrapping": true,

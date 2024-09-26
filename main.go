@@ -779,6 +779,9 @@ func main() {
 	playerInventory := items.NewInventory(allItems)
 	inventoryUI := items.NewInventoryUI(WIDTH, HEIGHT, float32(tm.Tilesize))
 	showInventory := false
+	seedShop := items.NewSeedShop("Seed merchant", allItems)
+	seedShopUI := items.NewShopUI(rl.NewVector2(WIDTH, HEIGHT), float32(tm.Tilesize))
+	showShop := false
 
 	var camScroll = rl.NewVector2(0, 0)
 	var day int = 0
@@ -809,6 +812,11 @@ func main() {
 				inventoryUI.ItemClick(&playerInventory, rl.GetMousePosition())
 			}
 			inventoryUI.ItemHover(&playerInventory, rl.GetMousePosition())
+		} else if showShop {
+			if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
+				seedShopUI.Click(rl.GetMousePosition(), &playerInventory, &seedShop)
+			}
+			seedShopUI.ItemHover(rl.GetMousePosition(), &playerInventory, &seedShop)
 		} else {
 			if rl.IsKeyDown(rl.KeyUp) {
 				playerMoveY[0] = 1
@@ -1024,6 +1032,9 @@ func main() {
 			rl.DrawRectangle(0, 0, WIDTH, HEIGHT, rl.NewColor(0, 0, 0, uint8(transitionCounter)))
 		}
 
+		if showShop {
+			seedShopUI.Draw(&seedShop, &playerInventory, uiAssets, float32(tm.TileScale))
+		}
 		woodDropSfx.Draw(camScroll, float32(tm.TileScale))
 		// draw inventory
 		if showInventory {

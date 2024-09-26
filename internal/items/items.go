@@ -2,6 +2,7 @@ package items
 
 import (
 	"math"
+	"strconv"
 	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -91,6 +92,7 @@ func LoadItems(assets map[string]strip.StripImg) []Item {
 			Image:       cropStrip(assets["pumpkin"], 3),
 		},
 		{
+			Type:        "seed",
 			BuyPrice:    15,
 			SellPrice:   12,
 			Name:        "Radish seed",
@@ -218,7 +220,34 @@ func UnloadItems(items []Item) {
 	}
 }
 
-func ItemSlotRect(container rl.Rectangle, i int, padding float32, slotsize float32, colCount float32) rl.Rectangle {
+func DrawItem(rect rl.Rectangle, img rl.Texture2D, scale float32, quantity int) {
+	rl.DrawRectangleRec(rect, rl.Brown)
+	slotsize := rect.Width
+	tx := rect.X + slotsize*0.5 - float32(img.Width)*scale*0.5
+	ty := rect.Y + slotsize*0.5 - float32(img.Height)*scale*0.5
+	rl.DrawTextureEx(img, rl.NewVector2(tx, ty), 0, scale, rl.White)
+
+	// quantity
+	var qfontsize int32 = 15
+	qText := strconv.Itoa(quantity)
+	qWidth := rl.MeasureText(qText, qfontsize) + 5
+	rl.DrawText(qText, int32(rect.X+slotsize)-qWidth, int32(rect.Y+slotsize)-qfontsize, qfontsize, rl.White)
+}
+
+func drawSlotSelection(rect rl.Rectangle, scale float32, uiAssets map[string]rl.Texture2D, alpha uint8) {
+	shift := rect.Width * 0.25
+	stl := rl.NewVector2(rect.X-shift, rect.Y-shift)
+	str := rl.NewVector2(rect.X+rect.Width-shift, rect.Y-shift)
+	sbl := rl.NewVector2(rect.X-shift, rect.Y+rect.Height-shift)
+	sbr := rl.NewVector2(rect.X+rect.Width-shift, rect.Y+rect.Height-shift)
+	tint := rl.NewColor(255, 255, 255, alpha)
+	rl.DrawTextureEx(uiAssets["selectbox_tl"], stl, 0, scale, tint)
+	rl.DrawTextureEx(uiAssets["selectbox_tr"], str, 0, scale, tint)
+	rl.DrawTextureEx(uiAssets["selectbox_br"], sbr, 0, scale, tint)
+	rl.DrawTextureEx(uiAssets["selectbox_bl"], sbl, 0, scale, tint)
+}
+
+func itemSlotRect(container rl.Rectangle, i int, padding float32, slotsize float32, colCount float32) rl.Rectangle {
 	x := container.X + padding + ((padding + slotsize) * (float32(math.Mod(float64(i), float64(colCount)))))
 	y := container.Y + padding*2 + ((padding + slotsize) * (float32(math.Floor(float64(i) / float64(colCount)))))
 	rect := rl.NewRectangle(x, y, slotsize, slotsize)
