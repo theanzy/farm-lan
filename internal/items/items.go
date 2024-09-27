@@ -261,3 +261,22 @@ func CropToSeedName(cropName string) string {
 func CropToCropName(cropName string) string {
 	return strings.ToUpper(cropName[0:1]) + cropName[1:]
 }
+
+func DrawMultilineText(text string, topleft rl.Vector2, fontsize int32, maxwidth int32, linespacing int32) {
+	words := strings.Split(text, " ")
+	startX := 0
+	endX := 0
+	y := 0
+	startY := topleft.Y
+	maxWidth := maxwidth
+	for endX < len(words) {
+		line := strings.Join(words[startX:endX+1], " ")
+		w := rl.MeasureText(line, fontsize)
+		if endX >= len(words)-1 || w >= maxWidth {
+			rl.DrawText(line, int32(topleft.X), int32(startY)+int32(y)*fontsize+int32(y)*linespacing, fontsize, rl.Gray)
+			startX = endX + 1
+			y += 1
+		}
+		endX += 1
+	}
+}

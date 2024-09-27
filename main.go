@@ -653,14 +653,6 @@ func LoadToolUIAsset() map[string]rl.Texture2D {
 	return res
 }
 
-func LoadUIAsset() map[string]rl.Texture2D {
-	res := map[string]rl.Texture2D{}
-	res["selectbox_bl"] = rl.LoadTexture("./resources/UI/selectbox_bl.png")
-	res["selectbox_br"] = rl.LoadTexture("./resources/UI/selectbox_br.png")
-	res["selectbox_tl"] = rl.LoadTexture("./resources/UI/selectbox_tl.png")
-	res["selectbox_tr"] = rl.LoadTexture("./resources/UI/selectbox_tr.png")
-	return res
-}
 func UnloadTextureMap[K comparable](assets map[K]rl.Texture2D) {
 	for _, tex := range assets {
 		rl.UnloadTexture(tex)
@@ -684,7 +676,14 @@ func main() {
 	defer strip.UnloadMapStripImg(cropAssets)
 	woodDropSfx := sfx.NewItemDrop(cropAssets["wood"].Img, 50)
 
-	uiAssets := LoadUIAsset()
+	uiAssets := map[string]rl.Texture2D{
+		"selectbox_bl": rl.LoadTexture("./resources/UI/selectbox_bl.png"),
+		"selectbox_br": rl.LoadTexture("./resources/UI/selectbox_br.png"),
+		"selectbox_tl": rl.LoadTexture("./resources/UI/selectbox_tl.png"),
+		"selectbox_tr": rl.LoadTexture("./resources/UI/selectbox_tr.png"),
+		"arrow_left":   rl.LoadTexture("./resources/UI/arrow_left.png"),
+		"arrow_right":  rl.LoadTexture("./resources/UI/arrow_right.png"),
+	}
 	defer UnloadTextureMap(uiAssets)
 	treeAssets := map[string]strip.StripImg{
 		"tree_01": strip.NewStripImg(rl.LoadTexture("./resources/elements/Plants/spr_deco_tree_01_strip4.png"), 4),
@@ -780,8 +779,8 @@ func main() {
 	inventoryUI := items.NewInventoryUI(WIDTH, HEIGHT, float32(tm.Tilesize))
 	showInventory := false
 	seedShop := items.NewSeedShop("Seed merchant", allItems)
-	seedShopUI := items.NewShopUI(rl.NewVector2(WIDTH, HEIGHT), float32(tm.Tilesize))
-	showShop := false
+	seedShopUI := items.NewShopUI(rl.NewVector2(WIDTH, HEIGHT), float32(tm.Tilesize), uiAssets)
+	showShop := true
 
 	var camScroll = rl.NewVector2(0, 0)
 	var day int = 0
@@ -808,15 +807,16 @@ func main() {
 		} else if showInventory {
 			if rl.IsKeyPressed(rl.KeyI) {
 				showInventory = false
-			} else if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
+			} else if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
 				inventoryUI.ItemClick(&playerInventory, rl.GetMousePosition())
 			}
 			inventoryUI.ItemHover(&playerInventory, rl.GetMousePosition())
 		} else if showShop {
-			if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
+			if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
 				seedShopUI.Click(rl.GetMousePosition(), &playerInventory, &seedShop)
 			}
 			seedShopUI.ItemHover(rl.GetMousePosition(), &playerInventory, &seedShop)
+			seedShopUI.Update()
 		} else {
 			if rl.IsKeyDown(rl.KeyUp) {
 				playerMoveY[0] = 1

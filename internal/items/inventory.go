@@ -158,24 +158,12 @@ func (ui *InventoryUI) Draw(inventory *Inventory, uiAssets map[string]rl.Texture
 		rl.DrawText(priceText, int32(descRect.X+descRect.Width-padding-float32(priceTextW)), int32(descRect.Y+padding*0.5), 25, rl.DarkGray)
 
 		// description
-		desc := items[inventoryIdx].Description
-		words := strings.Split(desc, " ")
-		var fontsize int32 = 20
-		startX := 0
-		endX := 0
-		y := 0
-		startY := descRect.Y + padding*2
-		maxWidth := int32(descRect.Width - 6*padding)
-		for endX < len(words) {
-			line := strings.Join(words[startX:endX+1], " ")
-			w := rl.MeasureText(line, fontsize)
-			if endX >= len(words)-1 || w >= maxWidth {
-				rl.DrawText(line, int32(descRect.X+padding), int32(startY)+int32(y)*fontsize+int32(y)*8, fontsize, rl.Gray)
-				startX = endX + 1
-				y += 1
-			}
-			endX += 1
-		}
-
+		DrawMultilineText(
+			items[inventoryIdx].Description,
+			rl.NewVector2(descRect.X+padding, descRect.Y+padding*2),
+			20,
+			int32(descRect.Width-6*padding),
+			8,
+		)
 	}
 }
