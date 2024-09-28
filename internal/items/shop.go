@@ -152,129 +152,193 @@ func NewShopUI(screenSize rl.Vector2, tilesize float32, uiAssets map[string]rl.T
 	}
 }
 
-func (ui *ShopUI) Click(mpos rl.Vector2, inventory *Inventory, shop *Shop) {
+func (u *ShopUI) Click(mpos rl.Vector2, inventory *Inventory, shop *Shop) {
 	for i, item := range inventory.Items() {
-		rect := itemSlotRect(ui.inventoryContainer, i, ui.padding, ui.slotsize, ui.colcount)
+		rect := itemSlotRect(u.inventoryContainer, i, u.padding, u.slotsize, u.colcount)
 		if rl.CheckCollisionPointRec(mpos, rect) {
-			ui.selection.id = item.Name
-			ui.selection.side = "inventory"
-			ui.selectionRect = rect
-			ui.button.SetText("SELL")
-			ui.button.BgColor = rl.Red
-			ui.quantity = 1
+			u.selection.id = item.Name
+			u.selection.side = "inventory"
+			u.selectionRect = rect
+			u.button.SetText("SELL")
+			u.button.BgColor = rl.Red
+			u.quantity = 1
 			return
 		}
 	}
 	for i, item := range shop.Items {
-		rect := itemSlotRect(ui.shopContainer, i, ui.padding, ui.slotsize, ui.colcount)
+		rect := itemSlotRect(u.shopContainer, i, u.padding, u.slotsize, u.colcount)
 		if rl.CheckCollisionPointRec(mpos, rect) {
-			ui.selection.id = item.Name
-			ui.selection.side = "shop"
-			ui.selectionRect = rect
-			ui.button.SetText("BUY")
-			ui.button.BgColor = rl.Blue
-			ui.quantity = 1
+			u.selection.id = item.Name
+			u.selection.side = "shop"
+			u.selectionRect = rect
+			u.button.SetText("BUY")
+			u.button.BgColor = rl.NewColor(30, 144, 255, 255)
+			u.quantity = 1
 			return
 		}
 	}
-	if rl.CheckCollisionPointRec(mpos, ui.button.Rect) {
-		ui.button.Press()
+	if rl.CheckCollisionPointRec(mpos, u.button.Rect) {
+		u.button.Press()
+		// buy or sell
+		if u.selection.side == "shop" {
+			// buy
+			if idx := slices.IndexFunc(shop.Items, func(x ShopItem) bool { return x.Name == u.selection.id }); idx != -1 {
+				item := shop.Items[idx]
+				quantity := u.quantity
+				price := item.BuyPrice
+				total := float32(quantity * price)
+				if inventory.deposit >= total {
+					inventory.deposit -= total
+					shop.Decrease(u.selection.id, quantity)
+					inventory.Increase(u.selection.id, quantity)
+					if remaining := item.Quantity - quantity; remaining == 0 {
+						u.selection.id = ""
+					}
+				}
+
+			}
+		} else if u.selection.side == "inventory" {
+			// sell
+			if idx := slices.IndexFunc(inventory.Items(), func(x InventoryItem) bool { return x.Name == u.selection.id }); idx != -1 {
+				item := inventory.Items()[idx]
+				quantity := u.quantity
+				price := item.SellPrice
+				inventory.Decrease(u.selection.id, quantity)
+				total := quantity * price
+				inventory.deposit += float32(total)
+				if remaining := item.Quantity - quantity; remaining == 0 {
+					u.selection.id = ""
+				}
+			}
+		}
 	}
-	if rl.CheckCollisionPointRec(mpos, ui.increaseButton.Rect) {
+	if rl.CheckCollisionPointRec(mpos, u.increaseButton.Rect) {
+		u.increaseButton.Press()
 		maxQuantity := 1
-		if ui.selection.side == "inventory" {
-			if idx := slices.IndexFunc(inventory.Items(), func(x InventoryItem) bool { return x.Name == ui.selection.id }); idx != -1 {
-				maxQuantity = inventory.Items()[idx].Quantity
+		if u.selection.side == "inventory" {
+			if idx := slices.IndexFunc(inventory.Items(), func(x InventoryItem) bool { return x.Name == u.selection.id }); idx != -1 {
+				item := inventory.Items()[idx]
+				maxQuantity = item.Quantity
 			}
+		}
+		if u.selection.side == "shop" {
+			if idx := slices.IndexFunc(shop.Items, func(x ShopItem) bool { return x.Name == u.selection.id }); idx != -1 {
+				item := shop.Items[idx]
+				maxQuantity = item.Quantity
+			}
+		}
+		u.quantity = u.quantity + 1
+		if u.quantity > maxQuantity {
+			u.quantity = maxQuantity
+		}
 
-		}
-		if ui.selection.side == "shop" {
-			if idx := slices.IndexFunc(shop.Items, func(x ShopItem) bool { return x.Name == ui.selection.id }); idx != -1 {
-				maxQuantity = shop.Items[idx].Quantity
-			}
-		}
-		ui.quantity = ui.quantity + 1
-		if ui.quantity > maxQuantity {
-			ui.quantity = maxQuantity
-		}
-		ui.increaseButton.Press()
 	}
-	if rl.CheckCollisionPointRec(mpos, ui.decreaseButton.Rect) {
-		ui.quantity = max(1, ui.quantity-1)
-		ui.decreaseButton.Press()
+	if rl.CheckCollisionPointRec(mpos, u.decreaseButton.Rect) {
+		u.decreaseButton.Press()
+		u.quantity = max(1, u.quantity-1)
 	}
 }
 
-func (ui *ShopUI) Update() {
-	ui.button.Update()
-	ui.increaseButton.Update()
-	ui.decreaseButton.Update()
+func (u *ShopUI) Update() {
+	u.button.Update()
+	u.increaseButton.Update()
+	u.decreaseButton.Update()
 }
 
-func (ui *ShopUI) Draw(shop *Shop, inventory *Inventory, uiAssets map[string]rl.Texture2D, tilescale float32) {
+func (u *ShopUI) Draw(shop *Shop, inventory *Inventory, uiAssets map[string]rl.Texture2D, tilescale float32) {
 	lineColor := rl.NewColor(rl.Beige.R-20, rl.Beige.G-20, rl.Beige.B-20, 255)
-	rl.DrawRectangleRec(ui.container, rl.Beige)
-	rl.DrawRectangleLinesEx(ui.container, 2, lineColor)
+	rl.DrawRectangleRec(u.container, rl.Beige)
+	rl.DrawRectangleLinesEx(u.container, 2, lineColor)
 
-	ui.drawInventory(inventory, ui.inventoryContainer, uiAssets, tilescale)
+	u.drawInventory(inventory, u.inventoryContainer, tilescale)
 
-	midX := ui.container.X + ui.container.Width*0.5
-	rl.DrawLineEx(rl.NewVector2(midX, ui.container.Y), rl.NewVector2(midX, ui.container.Y+ui.container.Height), 2, lineColor)
+	midX := u.container.X + u.container.Width*0.5
+	rl.DrawLineEx(rl.NewVector2(midX, u.container.Y), rl.NewVector2(midX, u.container.Y+u.container.Height), 2, lineColor)
 
 	// shop
-	ui.drawShop(shop, ui.shopContainer, uiAssets, tilescale)
-	if ui.selection.id != "" {
-		drawSlotSelection(ui.selectionRect, tilescale, uiAssets, 255)
-		rl.DrawRectangleRec(ui.footerContainer, rl.White)
-		rl.DrawRectangleLinesEx(ui.footerContainer, 2, lineColor)
+	u.drawShop(shop, u.shopContainer, tilescale)
+	priceText := fmt.Sprintf("%.0f", inventory.deposit)
+	priceTextWidth := rl.MeasureText(priceText, 22)
+	rl.DrawText(priceText, int32(u.container.X+u.container.Width-u.padding)-priceTextWidth, int32(u.container.Y)+15, 22, rl.White)
+
+	if u.selection.id != "" {
+		drawSlotSelection(u.selectionRect, tilescale, uiAssets, 255)
+		rl.DrawRectangleRec(u.footerContainer, rl.White)
+		rl.DrawRectangleLinesEx(u.footerContainer, 2, lineColor)
 		// name
-		if ui.selection.side == "shop" {
+		if u.selection.side == "shop" {
 			if idx := slices.IndexFunc(shop.Items, func(x ShopItem) bool {
-				return x.Name == ui.selection.id
+				return x.Name == u.selection.id
 			}); idx != -1 {
 				item := shop.Items[idx]
+
+				var priceColor rl.Color
+				totalPrice := float32(item.BuyPrice * u.quantity)
+				if totalPrice <= inventory.deposit {
+					priceColor = rl.Black
+				} else {
+					priceColor = rl.Red
+				}
+				btn := u.button
+				if btn.State != ui.BtnPressed && totalPrice > inventory.deposit {
+					btn.State = ui.BtnDisabled
+				}
 				drawShopFooter(
-					ui.footerContainer,
+					u.footerContainer,
 					item.Name,
 					item.Description,
 					float32(item.BuyPrice),
-					float32(ui.quantity),
-					ui.padding,
-					&ui.button,
-					&ui.increaseButton,
-					&ui.decreaseButton,
+					float32(u.quantity),
+					priceColor,
+					u.padding,
+					&btn,
+					&u.increaseButton,
+					&u.decreaseButton,
 				)
 			}
-		} else if ui.selection.side == "inventory" {
+		} else if u.selection.side == "inventory" {
 			if idx := slices.IndexFunc(inventory.Items(), func(x InventoryItem) bool {
-				return x.Name == ui.selection.id
+				return x.Name == u.selection.id
 			}); idx != -1 {
 				item := inventory.Items()[idx]
 				drawShopFooter(
-					ui.footerContainer,
+					u.footerContainer,
 					item.Name,
 					item.Description,
-					float32(item.BuyPrice),
-					float32(ui.quantity),
-					ui.padding,
-					&ui.button,
-					&ui.increaseButton,
-					&ui.decreaseButton,
+					float32(item.SellPrice),
+					float32(u.quantity),
+					rl.Black,
+					u.padding,
+					&u.button,
+					&u.increaseButton,
+					&u.decreaseButton,
 				)
 			}
 
 		}
 	}
-	if ui.hoverId.id != "" && ui.hoverId.id != ui.selection.id {
-		drawSlotSelection(ui.hoverRect, tilescale, uiAssets, 100)
+	if u.hoverId.id != "" && u.hoverId.id != u.selection.id {
+		drawSlotSelection(u.hoverRect, tilescale, uiAssets, 100)
 	}
 
 }
 
-func drawShopFooter(container rl.Rectangle, name string, description string, price float32, quantity float32, padding float32, button *ui.TextButton, increaseButton *ui.ImgButton, decreaseButton *ui.ImgButton) {
+func drawShopFooter(container rl.Rectangle, name string, description string, price float32, quantity float32, priceColor rl.Color, padding float32, button *ui.TextButton, increaseButton *ui.ImgButton, decreaseButton *ui.ImgButton) {
+	// name
 	rl.DrawText(name, int32(container.X+padding), int32(container.Y+padding), 20, rl.Black)
+	// description
+	descRect := rl.NewRectangle(container.X, container.Y+container.Height-180, container.Width-padding*2, 180)
+	DrawMultilineText(
+		description,
+		rl.NewVector2(descRect.X+padding, descRect.Y+padding*3.5),
+		19,
+		int32(descRect.Width-5*padding-button.Rect.Width),
+		8,
+	)
+
 	// price
-	priceText := fmt.Sprintf("$%0.f", price*quantity)
+	totalPrice := price * quantity
+	priceText := fmt.Sprintf("$%0.f", totalPrice)
 	var priceFontsize int32 = 20
 	priceTextWidth := rl.MeasureText(priceText, priceFontsize)
 	rl.DrawText(
@@ -282,7 +346,7 @@ func drawShopFooter(container rl.Rectangle, name string, description string, pri
 		int32(container.X+container.Width-padding-float32(priceTextWidth)),
 		int32(container.Y+padding),
 		priceFontsize,
-		rl.Black,
+		priceColor,
 	)
 
 	// quantity
@@ -310,59 +374,48 @@ func drawShopFooter(container rl.Rectangle, name string, description string, pri
 	// decrease button
 	decreaseButton.Draw()
 
-	// description
-	descRect := rl.NewRectangle(container.X, container.Y+container.Height-180, container.Width-padding*2, 180)
-	DrawMultilineText(
-		description,
-		rl.NewVector2(descRect.X+padding, descRect.Y+padding*3.5),
-		19,
-		int32(descRect.Width-5*padding-button.Rect.Width),
-		8,
-	)
 	button.Draw()
 }
 
-func (ui *ShopUI) ItemHover(mpos rl.Vector2, inventory *Inventory, shop *Shop) {
-	ui.hoverId.id = ""
-	ui.hoverId.side = ""
+func (u *ShopUI) ItemHover(mpos rl.Vector2, inventory *Inventory, shop *Shop) {
+	u.hoverId.id = ""
+	u.hoverId.side = ""
 	for i, item := range inventory.Items() {
-		rect := itemSlotRect(ui.inventoryContainer, i, ui.padding, ui.slotsize, ui.colcount)
+		rect := itemSlotRect(u.inventoryContainer, i, u.padding, u.slotsize, u.colcount)
 		if rl.CheckCollisionPointRec(mpos, rect) {
-			ui.hoverId.id = item.Name
-			ui.hoverId.side = "inventory"
-			ui.hoverRect = rect
+			u.hoverId.id = item.Name
+			u.hoverId.side = "inventory"
+			u.hoverRect = rect
 			return
-		} else {
-
 		}
 	}
 	for i, item := range shop.Items {
-		rect := itemSlotRect(ui.shopContainer, i, ui.padding, ui.slotsize, ui.colcount)
+		rect := itemSlotRect(u.shopContainer, i, u.padding, u.slotsize, u.colcount)
 		if rl.CheckCollisionPointRec(mpos, rect) {
-			ui.hoverId.id = item.Name
-			ui.hoverId.side = "shop"
-			ui.hoverRect = rect
+			u.hoverId.id = item.Name
+			u.hoverId.side = "shop"
+			u.hoverRect = rect
 			return
 		}
 	}
 }
 
-func (ui *ShopUI) drawInventory(inventory *Inventory, container rl.Rectangle, uiAssets map[string]rl.Texture2D, scale float32) {
+func (u *ShopUI) drawInventory(inventory *Inventory, container rl.Rectangle, scale float32) {
 	rl.DrawText("Inventory", int32(container.X)+20, int32(container.Y)+10, 30, rl.White)
 	items := inventory.Items()
-	padding := ui.padding
+	padding := u.padding
 	for i, item := range items {
-		rect := itemSlotRect(container, i, padding, ui.slotsize, ui.colcount)
+		rect := itemSlotRect(container, i, padding, u.slotsize, u.colcount)
 		DrawItem(rect, item.Image, scale, item.Quantity)
 	}
 }
 
-func (ui *ShopUI) drawShop(shop *Shop, container rl.Rectangle, uiAssets map[string]rl.Texture2D, scale float32) {
+func (u *ShopUI) drawShop(shop *Shop, container rl.Rectangle, scale float32) {
 	rl.DrawText(shop.name, int32(container.X)+20, int32(container.Y)+10, 30, rl.White)
 	items := shop.Items
-	padding := ui.padding
+	padding := u.padding
 	for i, item := range items {
-		rect := itemSlotRect(container, i, padding, ui.slotsize, ui.colcount)
+		rect := itemSlotRect(container, i, padding, u.slotsize, u.colcount)
 		DrawItem(rect, item.Image, scale, item.Quantity)
 	}
 }

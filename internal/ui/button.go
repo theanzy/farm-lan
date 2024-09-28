@@ -29,7 +29,7 @@ func (b *Button) Update() {
 }
 
 func (b *Button) Press() bool {
-	if b.State == BtnPressed {
+	if b.State == BtnPressed || b.State == BtnDisabled {
 		return false
 	}
 	b.State = BtnPressed
@@ -67,12 +67,15 @@ func (b *TextButton) SetText(text string) {
 
 func (b *TextButton) Draw() {
 
+	var bgColor rl.Color = b.BgColor
 	var diffcolor uint8 = 0
 	if b.State == BtnPressed {
-		diffcolor = 50
+		diffcolor = 30
+		bgColor = rl.NewColor(b.BgColor.R-diffcolor, b.BgColor.G-diffcolor, b.BgColor.B-diffcolor, 255)
+	} else if b.State == BtnDisabled {
+		bgColor = rl.NewColor(211, 211, 211, 255)
 	}
-	btnColor := rl.NewColor(b.BgColor.R-diffcolor, b.BgColor.G-diffcolor, b.BgColor.B-diffcolor, 255)
-	rl.DrawRectangleRounded(b.Rect, 0.2, 20, btnColor)
+	rl.DrawRectangleRounded(b.Rect, 0.2, 20, bgColor)
 	btnText := b.text
 	rl.DrawText(
 		btnText,

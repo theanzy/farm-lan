@@ -15,7 +15,8 @@ type InventoryItem struct {
 }
 
 type Inventory struct {
-	items []InventoryItem
+	items   []InventoryItem
+	deposit float32
 }
 
 func NewInventory(items []Item) Inventory {

@@ -780,7 +780,7 @@ func main() {
 	showInventory := false
 	seedShop := items.NewSeedShop("Seed merchant", allItems)
 	seedShopUI := items.NewShopUI(rl.NewVector2(WIDTH, HEIGHT), float32(tm.Tilesize), uiAssets)
-	showShop := true
+	showShop := false
 
 	var camScroll = rl.NewVector2(0, 0)
 	var day int = 0
