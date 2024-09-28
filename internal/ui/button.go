@@ -42,9 +42,11 @@ type TextButton struct {
 	text      string
 	textWidth float32
 	fontsize  int32
+	BgColor   rl.Color
+	TextColor rl.Color
 }
 
-func NewTextButton(rect rl.Rectangle, text string, fontsize int32) TextButton {
+func NewTextButton(rect rl.Rectangle, text string, fontsize int32, backgroundColor rl.Color) TextButton {
 	return TextButton{
 		Button: Button{
 			Rect:  rect,
@@ -53,7 +55,14 @@ func NewTextButton(rect rl.Rectangle, text string, fontsize int32) TextButton {
 		text:      text,
 		fontsize:  fontsize,
 		textWidth: float32(rl.MeasureText(text, fontsize)),
+		BgColor:   backgroundColor,
+		TextColor: rl.White,
 	}
+}
+
+func (b *TextButton) SetText(text string) {
+	b.text = text
+	b.textWidth = float32(rl.MeasureText(text, b.fontsize))
 }
 
 func (b *TextButton) Draw() {
@@ -62,9 +71,9 @@ func (b *TextButton) Draw() {
 	if b.State == BtnPressed {
 		diffcolor = 50
 	}
-	btnColor := rl.NewColor(rl.SkyBlue.R-diffcolor, rl.SkyBlue.G-diffcolor, rl.SkyBlue.B-diffcolor, 255)
+	btnColor := rl.NewColor(b.BgColor.R-diffcolor, b.BgColor.G-diffcolor, b.BgColor.B-diffcolor, 255)
 	rl.DrawRectangleRounded(b.Rect, 0.2, 20, btnColor)
-	btnText := "BUY"
+	btnText := b.text
 	rl.DrawText(
 		btnText,
 		int32(b.Rect.X+b.Rect.Width*0.5-b.textWidth*0.5),

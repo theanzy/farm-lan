@@ -89,6 +89,7 @@ type ShopUI struct {
 	button             ui.TextButton
 	increaseButton     ui.ImgButton
 	decreaseButton     ui.ImgButton
+	quantity           int
 }
 
 func NewShopUI(screenSize rl.Vector2, tilesize float32, uiAssets map[string]rl.Texture2D) ShopUI {
@@ -113,7 +114,7 @@ func NewShopUI(screenSize rl.Vector2, tilesize float32, uiAssets map[string]rl.T
 		150,
 		40,
 	)
-	btn := ui.NewTextButton(btnRect, "BUY", 20)
+	btn := ui.NewTextButton(btnRect, "BUY", 20, rl.Blue)
 
 	rightArrow := uiAssets["arrow_right"]
 	leftArrow := uiAssets["arrow_left"]
@@ -147,6 +148,7 @@ func NewShopUI(screenSize rl.Vector2, tilesize float32, uiAssets map[string]rl.T
 		button:             btn,
 		increaseButton:     increaseButton,
 		decreaseButton:     decreaseButton,
+		quantity:           1,
 	}
 }
 
@@ -157,6 +159,9 @@ func (ui *ShopUI) Click(mpos rl.Vector2, inventory *Inventory, shop *Shop) {
 			ui.selection.id = item.Name
 			ui.selection.side = "inventory"
 			ui.selectionRect = rect
+			ui.button.SetText("SELL")
+			ui.button.BgColor = rl.Red
+			ui.quantity = 1
 			return
 		}
 	}
@@ -166,6 +171,9 @@ func (ui *ShopUI) Click(mpos rl.Vector2, inventory *Inventory, shop *Shop) {
 			ui.selection.id = item.Name
 			ui.selection.side = "shop"
 			ui.selectionRect = rect
+			ui.button.SetText("BUY")
+			ui.button.BgColor = rl.Blue
+			ui.quantity = 1
 			return
 		}
 	}
@@ -173,9 +181,26 @@ func (ui *ShopUI) Click(mpos rl.Vector2, inventory *Inventory, shop *Shop) {
 		ui.button.Press()
 	}
 	if rl.CheckCollisionPointRec(mpos, ui.increaseButton.Rect) {
+		maxQuantity := 1
+		if ui.selection.side == "inventory" {
+			if idx := slices.IndexFunc(inventory.Items(), func(x InventoryItem) bool { return x.Name == ui.selection.id }); idx != -1 {
+				maxQuantity = inventory.Items()[idx].Quantity
+			}
+
+		}
+		if ui.selection.side == "shop" {
+			if idx := slices.IndexFunc(shop.Items, func(x ShopItem) bool { return x.Name == ui.selection.id }); idx != -1 {
+				maxQuantity = shop.Items[idx].Quantity
+			}
+		}
+		ui.quantity = ui.quantity + 1
+		if ui.quantity > maxQuantity {
+			ui.quantity = maxQuantity
+		}
 		ui.increaseButton.Press()
 	}
 	if rl.CheckCollisionPointRec(mpos, ui.decreaseButton.Rect) {
+		ui.quantity = max(1, ui.quantity-1)
 		ui.decreaseButton.Press()
 	}
 }
@@ -208,64 +233,93 @@ func (ui *ShopUI) Draw(shop *Shop, inventory *Inventory, uiAssets map[string]rl.
 				return x.Name == ui.selection.id
 			}); idx != -1 {
 				item := shop.Items[idx]
-				padding := ui.padding
-				rl.DrawText(item.Name, int32(ui.footerContainer.X+ui.padding), int32(ui.footerContainer.Y+ui.padding), 20, rl.Black)
-				// price
-				squantity := 3
-				price := item.BuyPrice
-				priceText := fmt.Sprintf("$%d", price*squantity)
-				var priceFontsize int32 = 20
-				priceTextWidth := rl.MeasureText(priceText, priceFontsize)
-				rl.DrawText(
-					priceText,
-					int32(ui.footerContainer.X+ui.footerContainer.Width-ui.padding-float32(priceTextWidth)),
-					int32(ui.footerContainer.Y+ui.padding),
-					priceFontsize,
-					rl.Black,
-				)
-
-				// quantity
-				quantityRect := rl.NewRectangle(
-					ui.button.Rect.X+ui.button.Rect.Width*0.5-35,
-					ui.button.Rect.Y-padding*0.25-float32(ui.increaseButton.Rect.Height),
-					70,
-					30,
-				)
-				rl.DrawRectangleRec(quantityRect, rl.RayWhite)
-				qText := fmt.Sprintf("%d", squantity)
-				var qFontSize int32 = 18
-				qTextWidth := rl.MeasureText(qText, qFontSize)
-				rl.DrawText(
-					qText,
-					int32(quantityRect.X+quantityRect.Width*0.5-float32(qTextWidth)*0.5),
-					int32(quantityRect.Y+quantityRect.Height*0.5-float32(qFontSize)*0.5),
-					qFontSize,
-					rl.Black,
-				)
-
-				// increase button
-				ui.increaseButton.Draw()
-
-				// decrease button
-				ui.decreaseButton.Draw()
-
-				// description
-				descRect := rl.NewRectangle(ui.footerContainer.X, ui.footerContainer.Y+ui.footerContainer.Height-180, ui.footerContainer.Width-padding*2, 180)
-				DrawMultilineText(
+				drawShopFooter(
+					ui.footerContainer,
+					item.Name,
 					item.Description,
-					rl.NewVector2(descRect.X+padding, descRect.Y+padding*3.5),
-					19,
-					int32(descRect.Width-5*padding-ui.button.Rect.Width),
-					8,
+					float32(item.BuyPrice),
+					float32(ui.quantity),
+					ui.padding,
+					&ui.button,
+					&ui.increaseButton,
+					&ui.decreaseButton,
 				)
-				ui.button.Draw()
 			}
+		} else if ui.selection.side == "inventory" {
+			if idx := slices.IndexFunc(inventory.Items(), func(x InventoryItem) bool {
+				return x.Name == ui.selection.id
+			}); idx != -1 {
+				item := inventory.Items()[idx]
+				drawShopFooter(
+					ui.footerContainer,
+					item.Name,
+					item.Description,
+					float32(item.BuyPrice),
+					float32(ui.quantity),
+					ui.padding,
+					&ui.button,
+					&ui.increaseButton,
+					&ui.decreaseButton,
+				)
+			}
+
 		}
 	}
 	if ui.hoverId.id != "" && ui.hoverId.id != ui.selection.id {
 		drawSlotSelection(ui.hoverRect, tilescale, uiAssets, 100)
 	}
 
+}
+
+func drawShopFooter(container rl.Rectangle, name string, description string, price float32, quantity float32, padding float32, button *ui.TextButton, increaseButton *ui.ImgButton, decreaseButton *ui.ImgButton) {
+	rl.DrawText(name, int32(container.X+padding), int32(container.Y+padding), 20, rl.Black)
+	// price
+	priceText := fmt.Sprintf("$%0.f", price*quantity)
+	var priceFontsize int32 = 20
+	priceTextWidth := rl.MeasureText(priceText, priceFontsize)
+	rl.DrawText(
+		priceText,
+		int32(container.X+container.Width-padding-float32(priceTextWidth)),
+		int32(container.Y+padding),
+		priceFontsize,
+		rl.Black,
+	)
+
+	// quantity
+	quantityRect := rl.NewRectangle(
+		button.Rect.X+button.Rect.Width*0.5-35,
+		button.Rect.Y-padding*0.25-float32(increaseButton.Rect.Height),
+		70,
+		30,
+	)
+	rl.DrawRectangleRec(quantityRect, rl.RayWhite)
+	qText := fmt.Sprintf("%0.f", quantity)
+	var qFontSize int32 = 18
+	qTextWidth := rl.MeasureText(qText, qFontSize)
+	rl.DrawText(
+		qText,
+		int32(quantityRect.X+quantityRect.Width*0.5-float32(qTextWidth)*0.5),
+		int32(quantityRect.Y+quantityRect.Height*0.5-float32(qFontSize)*0.5),
+		qFontSize,
+		rl.Black,
+	)
+
+	// increase button
+	increaseButton.Draw()
+
+	// decrease button
+	decreaseButton.Draw()
+
+	// description
+	descRect := rl.NewRectangle(container.X, container.Y+container.Height-180, container.Width-padding*2, 180)
+	DrawMultilineText(
+		description,
+		rl.NewVector2(descRect.X+padding, descRect.Y+padding*3.5),
+		19,
+		int32(descRect.Width-5*padding-button.Rect.Width),
+		8,
+	)
+	button.Draw()
 }
 
 func (ui *ShopUI) ItemHover(mpos rl.Vector2, inventory *Inventory, shop *Shop) {
