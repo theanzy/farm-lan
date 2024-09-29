@@ -280,7 +280,7 @@ func (u *ShopUI) Draw(shop *Shop, inventory *Inventory, uiAssets map[string]rl.T
 					priceColor = rl.Red
 				}
 				btn := u.button
-				if btn.State != ui.BtnPressed && totalPrice > inventory.deposit {
+				if btn.State != ui.BtnDisabled && totalPrice > inventory.deposit {
 					btn.State = ui.BtnDisabled
 				}
 				drawShopFooter(

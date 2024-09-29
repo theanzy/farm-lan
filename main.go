@@ -142,6 +142,7 @@ type Tilemap struct {
 	Roofs        []Tile
 	FarmTiles    map[rl.Vector2]FarmTile
 	CropAssets   map[string]strip.StripImg
+	SeedShop     MerchantTile
 	TileScale    int
 }
 
@@ -166,9 +167,9 @@ func (tm *Tilemap) DrawTerrain(offset rl.Vector2, screenSize rl.Vector2) {
 	}
 
 	// Draw obstacles
-	// for obstaclePos := range tm.Obstacles {
-	// 	rl.DrawRectangle(int32(obstaclePos.X*float32(tm.Tilesize)-offset.X), int32(obstaclePos.Y*float32(tm.Tilesize)-offset.Y), int32(tm.Tilesize), int32(tm.Tilesize), rl.White)
-	// }
+	for obstaclePos := range tm.Obstacles {
+		rl.DrawRectangle(int32(obstaclePos.X*float32(tm.Tilesize)-offset.X), int32(obstaclePos.Y*float32(tm.Tilesize)-offset.Y), int32(tm.Tilesize), int32(tm.Tilesize), rl.White)
+	}
 }
 
 func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
@@ -336,7 +337,7 @@ func LoadImgWithScale(imgPath string, scale int32) rl.Texture2D {
 	return rl.LoadTextureFromImage(img)
 }
 
-func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg, treeAssets map[string]strip.StripImg, treeHunkImg rl.Texture2D, tilesize int) Tilemap {
+func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg, treeAssets map[string]strip.StripImg, treeHunkImg rl.Texture2D, humanAnimStyles anim.AnimStyles, tilesize int) Tilemap {
 	scale := tilesize / tmd.TileWidth
 
 	var tm Tilemap
@@ -367,9 +368,36 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 			if id == 0 {
 				continue
 			}
-			x := i % width
-			y := i / width
-			cellpos := rl.NewVector2(float32(x), float32(y))
+			cellpos := rl.NewVector2(float32(i%width), float32(i/width))
+			if layer.Name == "seed_shop" && id > 0 {
+				baseImg := humanAnimStyles["IDLE"].Base
+				assetSize := rl.NewVector2(float32(baseImg.Width)/float32(humanAnimStyles["IDLE"].StripCount), float32(baseImg.Height)/2)
+				size := rl.NewVector2(
+					float32(assetSize.X)*float32(scale),
+					float32(assetSize.Y)*float32(scale),
+				)
+				offsetSize := rl.NewVector2(
+					size.X*0.5-float32(tilesize)*0.5,
+					size.Y*0.5-float32(tilesize)*0.5,
+				)
+				tm.SeedShop = MerchantTile{
+					Rect:    rl.NewRectangle(cellpos.X*float32(tilesize), cellpos.Y*float32(tilesize), float32(tilesize), float32(tilesize)),
+					imgRect: rl.NewRectangle(cellpos.X*float32(tilesize)-offsetSize.X, cellpos.Y*float32(tilesize)-offsetSize.Y, size.X, size.Y),
+					BaseAnim: anim.NewStripAnimation(
+						baseImg,
+						assetSize,
+						12,
+						float32(humanAnimStyles["IDLE"].StripCount),
+					),
+					StyleAnim: anim.NewStripAnimation(
+						humanAnimStyles["IDLE"].Variants["bowlhair"],
+						assetSize,
+						12,
+						float32(humanAnimStyles["IDLE"].StripCount),
+					),
+				}
+				continue
+			}
 			if layer.Name == "obstacles" && id > 0 {
 				tm.Obstacles[cellpos] = true
 				continue
@@ -418,6 +446,24 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 	})
 
 	return tm
+}
+
+type MerchantTile struct {
+	BaseAnim  anim.StripAnimation
+	StyleAnim anim.StripAnimation
+	imgRect   rl.Rectangle
+	Rect      rl.Rectangle
+}
+
+func (t *MerchantTile) Update(dt float32) {
+	t.BaseAnim.Update(dt)
+	t.StyleAnim.Update(dt)
+}
+
+func (t *MerchantTile) Draw(offset rl.Vector2) {
+	destRect := rl.NewRectangle(t.imgRect.X-offset.X, t.imgRect.Y-offset.Y, t.imgRect.Width, t.imgRect.Height)
+	rl.DrawTexturePro(t.BaseAnim.Image, t.BaseAnim.SrcRect(false), destRect, rl.NewVector2(0, 0), 0, rl.White)
+	rl.DrawTexturePro(t.StyleAnim.Image, t.StyleAnim.SrcRect(false), destRect, rl.NewVector2(0, 0), 0, rl.White)
 }
 
 type Player struct {
@@ -693,8 +739,11 @@ func main() {
 	treeHunkImg := rl.LoadTexture("./resources/elements/Plants/tree_hunk.png")
 	defer rl.UnloadTexture(treeHunkImg)
 
+	supportedStyles := []string{"IDLE", "WALKING", "WATERING", "DIG", "AXE"}
+	humanAnimStyles := anim.NewAnimStyles("./resources/characters/Human", supportedStyles)
+
 	tmd, _ := tileset.ParseMap("./resources/map/0.tmj")
-	tm := LoadTilemap(&tmd, cropAssets, treeAssets, treeHunkImg, 48)
+	tm := LoadTilemap(&tmd, cropAssets, treeAssets, treeHunkImg, humanAnimStyles, 48)
 	defer tm.Unload()
 
 	const cropTilesetStartId = 691
@@ -709,8 +758,6 @@ func main() {
 		HEIGHT-80,
 	)
 
-	supportedStyles := []string{"IDLE", "WALKING", "WATERING", "DIG", "AXE"}
-	humanAnimStyles := anim.NewAnimStyles("./resources/characters/Human", supportedStyles)
 	defer anim.UnloadAnimStyles(humanAnimStyles)
 
 	toolsUIAsset := LoadToolUIAsset()
@@ -771,6 +818,14 @@ func main() {
 			return rl.NewVector2(player.Center().X, player.Pos.Y+float32(tm.Tilesize)*0.5)
 		},
 	})
+	depthRenderer.Sprites = append(depthRenderer.Sprites, render.Sprite{
+		Draw: func(offset rl.Vector2, drawRoof bool) {
+			tm.SeedShop.Draw(offset)
+		},
+		Center: func() rl.Vector2 {
+			return rl.NewVector2(tm.SeedShop.imgRect.X+tm.SeedShop.imgRect.Width*0.5, tm.SeedShop.imgRect.Y+tm.SeedShop.imgRect.Height*0.5)
+		},
+	})
 
 	allItems := items.LoadItems(cropAssets)
 	defer items.UnloadItems(allItems)
@@ -812,11 +867,16 @@ func main() {
 			}
 			inventoryUI.ItemHover(&playerInventory, rl.GetMousePosition())
 		} else if showShop {
-			if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
-				seedShopUI.Click(rl.GetMousePosition(), &playerInventory, &seedShop)
+			if rl.IsKeyPressed(rl.KeySpace) {
+				showShop = false
+
+			} else {
+				if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
+					seedShopUI.Click(rl.GetMousePosition(), &playerInventory, &seedShop)
+				}
+				seedShopUI.ItemHover(rl.GetMousePosition(), &playerInventory, &seedShop)
+				seedShopUI.Update()
 			}
-			seedShopUI.ItemHover(rl.GetMousePosition(), &playerInventory, &seedShop)
-			seedShopUI.Update()
 		} else {
 			if rl.IsKeyDown(rl.KeyUp) {
 				playerMoveY[0] = 1
@@ -931,6 +991,8 @@ func main() {
 						ft.IsWet = false
 						tm.FarmTiles[p] = ft
 					}
+				} else if rl.CheckCollisionPointRec(hp, tm.SeedShop.Rect) {
+					showShop = true
 				}
 			}
 			if rl.IsKeyPressed(rl.KeyI) {
@@ -982,6 +1044,7 @@ func main() {
 		}
 		woodDropSfx.Update(dt)
 		depthRenderer.Update()
+		tm.SeedShop.Update(dt)
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)
