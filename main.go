@@ -138,8 +138,6 @@ type Tilemap struct {
 	Tilesize     int
 	tilesetCols  int
 	tilesetRows  int
-	Cols         int
-	Rows         int
 	Roofs        []Tile
 	FarmTiles    map[rl.Vector2]FarmTile
 	CropAssets   map[string]strip.StripImg
@@ -199,7 +197,14 @@ func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
 				),
 				offset,
 			)
-			DrawTilesetId(tm.tilesetAsset, 818, viewpos, tm.tilesetCols, float32(tm.Tilesize))
+			rl.DrawTexturePro(
+				tm.tilesetAsset,
+				tm.GetSrcRect(818),
+				tm.GetDestRect(viewpos, offset),
+				rl.NewVector2(0, 0),
+				0,
+				rl.White,
+			)
 			if ft.IsWet {
 				rl.DrawRectangleV(viewpos, rl.NewVector2(tilesize, tilesize), rl.NewColor(139, 69, 19, 60))
 			}
@@ -240,18 +245,20 @@ func (tm *Tilemap) DrawRoof(offset rl.Vector2) {
 }
 
 func (tm *Tilemap) DrawTile(tile Tile, offset rl.Vector2) {
-
-	cellpos := tile.Pos
-	viewpos := rl.Vector2Subtract(rl.NewVector2(cellpos.X*float32(tm.Tilesize), cellpos.Y*float32(tm.Tilesize)), offset)
-	DrawTilesetId(tm.tilesetAsset, tile.Variant, viewpos, tm.tilesetCols, float32(tm.Tilesize))
+	rl.DrawTexturePro(tm.tilesetAsset, tm.GetSrcRect(tile.Variant), tm.GetDestRect(tile.Pos, offset), rl.NewVector2(0, 0), 0, rl.White)
 }
 
-func DrawTilesetId(tileset rl.Texture2D, id int, pos rl.Vector2, tilesetCols int, tilesize float32) {
-	cols := tilesetCols
-	tx := float32((id % cols)) * tilesize
-	ty := float32((id / cols)) * tilesize
-	srcRect := rl.NewRectangle(tx, ty, tilesize, tilesize)
-	rl.DrawTextureRec(tileset, srcRect, pos, rl.White)
+func (tm *Tilemap) GetSrcRect(id int) rl.Rectangle {
+	cols := tm.tilesetCols
+	tilesize := tm.Tilesize
+	tx := float32((id % cols) * tilesize)
+	ty := float32((id / cols) * tilesize)
+	srcRect := rl.NewRectangle(tx, ty, float32(tilesize), float32(tilesize))
+	return srcRect
+}
+
+func (tm *Tilemap) GetDestRect(cellpos rl.Vector2, offset rl.Vector2) rl.Rectangle {
+	return rl.NewRectangle(cellpos.X*float32(tm.Tilesize)-offset.X, cellpos.Y*float32(tm.Tilesize)-offset.Y, float32(tm.Tilesize), float32(tm.Tilesize))
 }
 
 func (tm *Tilemap) ExtractObjectOne(obj string) *Tile {
@@ -347,8 +354,6 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 	tm.tilesetCols = int(tm.tilesetAsset.Width) / tilesize
 	tm.tilesetRows = int(tm.tilesetAsset.Height) / tilesize
 	tm.Trees = []Tree{}
-	tm.Cols = tmd.Width
-	tm.Rows = tmd.Height
 	tm.TileLayers = []map[rl.Vector2]Tile{}
 	tm.Obstacles = map[rl.Vector2]bool{}
 	tm.Objects = []Tile{}
@@ -861,7 +866,14 @@ func main() {
 		rl.DrawRectangle(0, 0, WIDTH, HEIGHT, overlayColor)
 
 		rl.DrawText(fmt.Sprintf("Day %d", day), 10, 10, 32, rl.White)
-		DrawTilesetId(tm.tilesetAsset, getFullCropTileId(currentSeed), seedUiPos, tm.tilesetCols, float32(tm.Tilesize))
+		rl.DrawTexturePro(
+			tm.tilesetAsset,
+			tm.GetSrcRect(getFullCropTileId(currentSeed)),
+			rl.NewRectangle(seedUiPos.X, seedUiPos.Y, float32(tm.Tilesize), float32(tm.Tilesize)),
+			rl.NewVector2(0, 0),
+			0,
+			rl.White,
+		)
 
 		toolTex := toolsUIAsset[player.Tool]
 		DrawTextureCenterV(toolTex, rl.NewVector2(float32(tm.Tilesize)*2, HEIGHT-80), float32(tm.Tilesize), float32(tm.TileScale))
