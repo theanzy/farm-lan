@@ -535,12 +535,6 @@ func main() {
 		return cropTilesetStartId + idx
 	}
 
-	currentSeed := "carrot"
-	seedUiPos := rl.NewVector2(
-		float32(tm.Tilesize),
-		HEIGHT-80,
-	)
-
 	defer anim.UnloadAnimStyles(humanAnimStyles)
 
 	toolsUIAsset := LoadToolUIAsset()
@@ -619,6 +613,12 @@ func main() {
 	seedShop := items.NewSeedShop("Seed merchant", allItems)
 	seedShopUI := items.NewShopUI(rl.NewVector2(WIDTH, HEIGHT), float32(tm.Tilesize), uiAssets)
 	showShop := false
+
+	currentSeed := playerInventory.AvailableSeeds()[0]
+	seedUiPos := rl.NewVector2(
+		float32(tm.Tilesize),
+		HEIGHT-80,
+	)
 
 	var camScroll = rl.NewVector2(0, 0)
 	var day int = 0
@@ -700,7 +700,7 @@ func main() {
 						r := rects[idx]
 						p := world.GetCellPos(rl.NewVector2(r.X, r.Y), float64(tm.Tilesize))
 						if ft, ok := tm.FarmTiles[p]; ok && ft.State == "empty" {
-							player.UseTool(300)
+							player.UseTool(100)
 						}
 					}
 				} else if player.Tool == "water" {
@@ -740,13 +740,17 @@ func main() {
 				})
 				if idx != -1 {
 					cp := world.GetCellPos(rl.NewVector2(rects[idx].X, rects[idx].Y), float64(tm.Tilesize))
-					if ft, ok := tm.FarmTiles[cp]; ok && ft.State == "digged" {
+					if ft, ok := tm.FarmTiles[cp]; ok && currentSeed != "" && ft.State == "digged" && playerInventory.Count(items.CropToSeedName(currentSeed)) > 0 {
 						ft.State = currentSeed
 						tm.FarmTiles[cp] = ft
-						if q := playerInventory.Decrease(items.CropToSeedName(currentSeed), 1); q == 0 {
+						if q := playerInventory.Decrease(items.CropToSeedName(currentSeed), 1); q >= 0 {
 							seeds := playerInventory.AvailableSeeds()
+							fmt.Println(seeds, len(seeds))
+
 							if len(seeds) > 0 {
 								currentSeed = playerInventory.AvailableSeeds()[0]
+							} else {
+								currentSeed = ""
 							}
 						}
 					}
@@ -868,14 +872,16 @@ func main() {
 		rl.DrawRectangle(0, 0, WIDTH, HEIGHT, overlayColor)
 
 		rl.DrawText(fmt.Sprintf("Day %d", day), 10, 10, 32, rl.White)
-		rl.DrawTexturePro(
-			tm.tilesetAsset,
-			tm.GetSrcRect(getFullCropTileId(currentSeed)),
-			rl.NewRectangle(seedUiPos.X, seedUiPos.Y, float32(tm.Tilesize), float32(tm.Tilesize)),
-			rl.NewVector2(0, 0),
-			0,
-			rl.White,
-		)
+		if currentSeed != "" {
+			rl.DrawTexturePro(
+				tm.tilesetAsset,
+				tm.GetSrcRect(getFullCropTileId(currentSeed)),
+				rl.NewRectangle(seedUiPos.X, seedUiPos.Y, float32(tm.Tilesize), float32(tm.Tilesize)),
+				rl.NewVector2(0, 0),
+				0,
+				rl.White,
+			)
+		}
 
 		toolTex := toolsUIAsset[player.Tool]
 		DrawTextureCenterV(toolTex, rl.NewVector2(float32(tm.Tilesize)*2, HEIGHT-80), float32(tm.Tilesize), float32(tm.TileScale))

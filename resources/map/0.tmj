@@ -1587,9 +1587,31 @@
          "width":80,
          "x":0,
          "y":0
+        }, 
+        {
+         "draworder":"topdown",
+         "id":32,
+         "name":"chimney_smoke",
+         "objects":[
+                {
+                 "height":8.33333333333337,
+                 "id":22,
+                 "name":"",
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":10.3333333333334,
+                 "x":876.333333333333,
+                 "y":351.666666666667
+                }],
+         "opacity":1,
+         "type":"objectgroup",
+         "visible":true,
+         "x":0,
+         "y":0
         }],
- "nextlayerid":32,
- "nextobjectid":22,
+ "nextlayerid":33,
+ "nextobjectid":25,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.11.0",

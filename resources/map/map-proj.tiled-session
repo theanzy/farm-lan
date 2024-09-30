@@ -16,8 +16,8 @@
             "scale": 4,
             "selectedLayer": 24,
             "viewCenter": {
-                "x": 818.875,
-                "y": 197.875
+                "x": 1019.75,
+                "y": 248.5
             }
         },
         "0.tmj#entities": {
@@ -30,7 +30,7 @@
         },
         "0.tmj#tilesets": {
             "dynamicWrapping": false,
-            "scaleInDock": 3
+            "scaleInDock": 1.5
         },
         "0.tmj#trees": {
             "dynamicWrapping": true,

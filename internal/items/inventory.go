@@ -68,6 +68,16 @@ func (i *Inventory) AvailableSeeds() []string {
 	return res
 }
 
+func (i *Inventory) Count(name string) int {
+	result := 0
+	for _, item := range i.items {
+		if item.Name == name {
+			result = item.Quantity
+		}
+	}
+	return result
+}
+
 func (i *Inventory) Items() []InventoryItem {
 	res := []InventoryItem{}
 	for _, item := range i.items {
