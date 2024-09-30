@@ -200,7 +200,7 @@ func (tm *Tilemap) DrawFarmTiles(offset rl.Vector2) {
 			rl.DrawTexturePro(
 				tm.tilesetAsset,
 				tm.GetSrcRect(818),
-				tm.GetDestRect(viewpos, offset),
+				tm.GetDestRect(cellpos, offset),
 				rl.NewVector2(0, 0),
 				0,
 				rl.White,
@@ -410,6 +410,7 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 			}
 			if layer.Name == "bed" && id > 0 {
 				tm.Beds[cellpos] = true
+				continue
 			}
 			if layer.Name == "farm_tile" && id > 0 {
 				tm.FarmTiles[cellpos] = FarmTile{
@@ -417,6 +418,7 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 					State:   "empty",
 					CropAge: 0,
 				}
+				continue
 			}
 			if layer.Name == "tree_real" && id > 0 {
 				if id == 4102 {
