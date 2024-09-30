@@ -13,11 +13,11 @@
             "scaleInEditor": 32
         },
         "0.tmj": {
-            "scale": 5.5,
-            "selectedLayer": 23,
+            "scale": 4,
+            "selectedLayer": 24,
             "viewCenter": {
-                "x": 939.4545454545455,
-                "y": 242.72727272727272
+                "x": 818.875,
+                "y": 197.875
             }
         },
         "0.tmj#entities": {
