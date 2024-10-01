@@ -1,8 +1,8 @@
 package anim
 
 import (
+	"fmt"
 	"log"
-	"math"
 	"os"
 	"path"
 	"regexp"
@@ -21,6 +21,34 @@ type AnimStyle struct {
 
 type AnimStyles = map[string]AnimStyle
 
+type AnimConfig struct {
+	Parts      []string
+	StripCount int
+}
+
+var stripRegExp = regexp.MustCompile(`[a-z](\d+)\.png`)
+
+// example: base_attack_strip10.png
+//
+// parts = ['base', 'attack']
+//
+// stripcount = 10
+func parseAnimConfig(filename string) (AnimConfig, error) {
+	parts := strings.Split(filename, "_")
+	if len(parts) < 3 {
+		return AnimConfig{}, fmt.Errorf("Invalid filename %q", filename)
+	}
+	s := stripRegExp.FindStringSubmatch(filename)[1]
+	strip, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return AnimConfig{}, err
+	}
+	return AnimConfig{
+		Parts:      parts[0:2],
+		StripCount: int(strip),
+	}, nil
+}
+
 func NewAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
 	styles := AnimStyles{}
 
@@ -28,7 +56,6 @@ func NewAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
 	if err != nil {
 		log.Fatal(err)
 	}
-	r := regexp.MustCompile(`[a-z](\d+)\.png`)
 
 	for _, e := range entries {
 		if !slices.Contains(supportedStyles, e.Name()) {
@@ -46,19 +73,17 @@ func NewAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
 		}
 
 		for _, f := range files {
-			variantName := strings.Split(f.Name(), "_")[0]
-			s := r.FindStringSubmatch(f.Name())[1]
-			strip, err := strconv.ParseInt(s, 10, 64)
+			cfg, err := parseAnimConfig(f.Name())
 			if err != nil {
 				log.Fatal(err)
 			}
-			style.StripCount = int(strip)
 			imgPath := path.Join(fullpath, f.Name())
 			img := rl.LoadTexture(imgPath)
-			if variantName == "base" {
+			style.StripCount = cfg.StripCount
+			if cfg.Parts[0] == "base" {
 				style.Base = img
 			} else {
-				style.Variants[variantName] = img
+				style.Variants[cfg.Parts[0]] = img
 			}
 		}
 		styles[e.Name()] = style
@@ -73,58 +98,4 @@ func UnloadAnimStyles(s AnimStyles) {
 			rl.UnloadTexture(variant)
 		}
 	}
-}
-
-type StripAnimation struct {
-	AssetSize      rl.Vector2
-	Image          rl.Texture2D
-	X              float32
-	Speed          float32
-	StripCount     float32
-	SrcRects       []rl.Rectangle
-	SrcRectFlipped []rl.Rectangle
-}
-
-// img is an image with strip facing right on the upper part, and strip facing left on the lower part
-func NewStripAnimation(img rl.Texture2D, assetSize rl.Vector2, animationSpeed float32, stripCount float32) StripAnimation {
-	rects, rectsFlipped := getSrcRects(int(stripCount), assetSize)
-	return StripAnimation{
-		Image:          img,
-		AssetSize:      assetSize,
-		X:              0,
-		Speed:          animationSpeed,
-		StripCount:     stripCount,
-		SrcRects:       rects,
-		SrcRectFlipped: rectsFlipped,
-	}
-}
-
-func getSrcRects(stripCount int, imgSize rl.Vector2) ([]rl.Rectangle, []rl.Rectangle) {
-	original := []rl.Rectangle{}
-	flipped := []rl.Rectangle{}
-	for i := range stripCount {
-		original = append(original, rl.NewRectangle(float32(i)*imgSize.X, 0, imgSize.X, imgSize.Y))
-		flipped = append(flipped, rl.NewRectangle(float32(i)*imgSize.X, imgSize.Y, imgSize.X, imgSize.Y))
-	}
-	return original, flipped
-}
-
-func (a *StripAnimation) Update(dt float32) {
-	a.X += dt * a.Speed
-	if a.X >= a.StripCount {
-		a.X = 0
-	}
-}
-
-func (a *StripAnimation) Reset() {
-	a.X = 0
-}
-
-func (a StripAnimation) SrcRect(flipped bool) rl.Rectangle {
-	x := int(math.Floor(float64(a.X)))
-
-	if flipped {
-		return a.SrcRectFlipped[x]
-	}
-	return a.SrcRects[x]
 }

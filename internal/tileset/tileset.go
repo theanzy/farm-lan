@@ -11,11 +11,19 @@ type LayerDataProperty struct {
 	Value int    `json:"value"`
 }
 
-type LayerData = struct {
+type LayerObject struct {
+	Height float32 `json:"height"`
+	Width  float32 `json:"width"`
+	X      float32 `json:"x"`
+	Y      float32 `json:"y"`
+}
+
+type LayerData struct {
 	Data       []float64 `json:"data"`
 	Name       string    `json:"name"`
 	Visible    bool      `json:"visible"`
 	Properties []LayerDataProperty
+	Objects    []LayerObject
 }
 
 func LayerGetProp(ld LayerData, name string) int {

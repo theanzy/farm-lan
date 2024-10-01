@@ -129,20 +129,21 @@ func (t *Tree) Draw(offset rl.Vector2) {
 }
 
 type Tilemap struct {
-	TileLayers   []map[rl.Vector2]Tile
-	Objects      []Tile
-	Obstacles    map[rl.Vector2]bool
-	Trees        []Tree
-	Beds         map[rl.Vector2]bool
-	tilesetAsset rl.Texture2D
-	Tilesize     int
-	tilesetCols  int
-	tilesetRows  int
-	Roofs        []Tile
-	FarmTiles    map[rl.Vector2]FarmTile
-	CropAssets   map[string]strip.StripImg
-	SeedShop     MerchantTile
-	TileScale    int
+	TileLayers       []map[rl.Vector2]Tile
+	Objects          []Tile
+	Obstacles        map[rl.Vector2]bool
+	Trees            []Tree
+	Beds             map[rl.Vector2]bool
+	tilesetAsset     rl.Texture2D
+	Tilesize         int
+	tilesetCols      int
+	tilesetRows      int
+	Roofs            []Tile
+	FarmTiles        map[rl.Vector2]FarmTile
+	CropAssets       map[string]strip.StripImg
+	SeedShop         MerchantTile
+	TileScale        int
+	ChimneySmokeList []anim.AnimatedTile
 }
 
 func (tm Tilemap) Unload() {
@@ -345,7 +346,15 @@ func LoadImgWithScale(imgPath string, scale int32) rl.Texture2D {
 	return rl.LoadTextureFromImage(img)
 }
 
-func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg, treeAssets map[string]strip.StripImg, treeHunkImg rl.Texture2D, humanAnimStyles anim.AnimStyles, tilesize int) Tilemap {
+func LoadTilemap(
+	tmd *tileset.TileMapData,
+	cropAssets map[string]strip.StripImg,
+	treeAssets map[string]strip.StripImg,
+	treeHunkImg rl.Texture2D,
+	humanAnimStyles anim.AnimStyles,
+	chimneySmokeAnim anim.StripAnimation,
+	tilesize int,
+) Tilemap {
 	scale := tilesize / tmd.TileWidth
 
 	var tm Tilemap
@@ -361,6 +370,7 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 	tm.TileScale = scale
 	tm.CropAssets = cropAssets
 	tm.Beds = map[rl.Vector2]bool{}
+	tm.ChimneySmokeList = []anim.AnimatedTile{}
 
 	var width = tmd.Width
 	sort.SliceStable(tmd.Layers, func(i, j int) bool {
@@ -370,6 +380,20 @@ func LoadTilemap(tmd *tileset.TileMapData, cropAssets map[string]strip.StripImg,
 	for _, layer := range tmd.Layers {
 		z := tileset.LayerGetProp(layer, "z")
 		tiles := map[rl.Vector2]Tile{}
+		if layer.Name == "chimney_smoke" {
+			for _, o := range layer.Objects {
+				tm.ChimneySmokeList = append(tm.ChimneySmokeList, anim.AnimatedTile{
+					Pos: rl.NewVector2(
+						o.X*float32(tm.TileScale)-o.Width*float32(tm.TileScale)/2,
+						o.Y*float32(tm.TileScale)-o.Height*float32(tm.TileScale)*2,
+					),
+					Tilescale: float32(tm.TileScale),
+					StripAnim: chimneySmokeAnim,
+				})
+
+			}
+			continue
+		}
 		for i, id := range layer.Data {
 			if id == 0 {
 				continue
@@ -525,8 +549,11 @@ func main() {
 	supportedStyles := []string{"IDLE", "WALKING", "WATERING", "DIG", "AXE"}
 	humanAnimStyles := anim.NewAnimStyles("./resources/characters/Human", supportedStyles)
 
+	chimneySmoke := anim.LoadStripAnimation("./resources/elements/VFX/Chimney Smoke/chimneysmoke_03_strip30.png", 10)
+	defer rl.UnloadTexture(chimneySmoke.Image)
+
 	tmd, _ := tileset.ParseMap("./resources/map/0.tmj")
-	tm := LoadTilemap(&tmd, cropAssets, treeAssets, treeHunkImg, humanAnimStyles, 48)
+	tm := LoadTilemap(&tmd, cropAssets, treeAssets, treeHunkImg, humanAnimStyles, chimneySmoke, 48)
 	defer tm.Unload()
 
 	const cropTilesetStartId = 691
@@ -745,8 +772,6 @@ func main() {
 						tm.FarmTiles[cp] = ft
 						if q := playerInventory.Decrease(items.CropToSeedName(currentSeed), 1); q >= 0 {
 							seeds := playerInventory.AvailableSeeds()
-							fmt.Println(seeds, len(seeds))
-
 							if len(seeds) > 0 {
 								currentSeed = playerInventory.AvailableSeeds()[0]
 							} else {
@@ -832,6 +857,10 @@ func main() {
 		woodDropSfx.Update(dt)
 		depthRenderer.Update()
 		tm.SeedShop.Update(dt)
+		for i, s := range tm.ChimneySmokeList {
+			s.Update(dt)
+			tm.ChimneySmokeList[i] = s
+		}
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.White)
@@ -866,6 +895,9 @@ func main() {
 
 		if !inHouse {
 			tm.DrawRoof(camScroll)
+		}
+		for _, s := range tm.ChimneySmokeList {
+			s.Draw(camScroll)
 		}
 
 		// draw ui
