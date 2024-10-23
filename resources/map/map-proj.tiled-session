@@ -13,11 +13,11 @@
             "scaleInEditor": 32
         },
         "0.tmj": {
-            "scale": 3,
-            "selectedLayer": 25,
+            "scale": 4,
+            "selectedLayer": 27,
             "viewCenter": {
-                "x": 656.6666666666667,
-                "y": 401.66666666666663
+                "x": 497.25,
+                "y": 580.5
             }
         },
         "0.tmj#entities": {
@@ -26,11 +26,11 @@
         },
         "0.tmj#plain-color": {
             "dynamicWrapping": false,
-            "scaleInDock": 1
+            "scaleInDock": 1.5
         },
         "0.tmj#tilesets": {
             "dynamicWrapping": false,
-            "scaleInDock": 4
+            "scaleInDock": 0.75
         },
         "0.tmj#trees": {
             "dynamicWrapping": true,

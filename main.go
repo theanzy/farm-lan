@@ -6,6 +6,7 @@ import (
 	rand "math/rand/v2"
 	"slices"
 	"sort"
+	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/theanzy/farmsim/internal/anim"
@@ -128,6 +129,11 @@ func (t *Tree) Draw(offset rl.Vector2) {
 	// rl.DrawRectangleRec(hitbox, rl.Red)
 }
 
+type TileObject struct {
+	Pos  rl.Vector2
+	Name string
+}
+
 type Tilemap struct {
 	TileLayers       []map[rl.Vector2]Tile
 	Objects          []Tile
@@ -144,6 +150,8 @@ type Tilemap struct {
 	SeedShop         MerchantTile
 	TileScale        int
 	ChimneySmokeList []anim.AnimatedTile
+	Animals          []TileObject
+	AnimalObstacles  map[rl.Vector2]bool
 }
 
 func (tm Tilemap) Unload() {
@@ -371,6 +379,8 @@ func LoadTilemap(
 	tm.CropAssets = cropAssets
 	tm.Beds = map[rl.Vector2]bool{}
 	tm.ChimneySmokeList = []anim.AnimatedTile{}
+	tm.Animals = []TileObject{}
+	tm.AnimalObstacles = map[rl.Vector2]bool{}
 
 	var width = tmd.Width
 	sort.SliceStable(tmd.Layers, func(i, j int) bool {
@@ -380,6 +390,15 @@ func LoadTilemap(
 	for _, layer := range tmd.Layers {
 		z := tileset.LayerGetProp(layer, "z")
 		tiles := map[rl.Vector2]Tile{}
+		if layer.Name == "animals" {
+			for _, o := range layer.Objects {
+				tm.Animals = append(tm.Animals, TileObject{
+					Pos:  rl.NewVector2(o.X*float32(scale), o.Y*float32(scale)),
+					Name: o.Name,
+				})
+			}
+			continue
+		}
 		if layer.Name == "chimney_smoke" {
 			for _, o := range layer.Objects {
 				tm.ChimneySmokeList = append(tm.ChimneySmokeList, anim.AnimatedTile{
@@ -430,6 +449,11 @@ func LoadTilemap(
 			}
 			if layer.Name == "obstacles" && id > 0 {
 				tm.Obstacles[cellpos] = true
+				continue
+			}
+
+			if layer.Name == "animal_obstacles" {
+				tm.AnimalObstacles[cellpos] = true
 				continue
 			}
 			if layer.Name == "bed" && id > 0 {
@@ -522,12 +546,14 @@ func main() {
 
 	// tileset id
 	var crops = []string{"carrot", "cauliflower", "pumpkin", "sunflower", "radish", "parsnip", "potato", "cabbage", "beetroot", "wheat", "kale"}
-	cropAssets, err := crop.LoadCropAssets("./resources/elements/Crops", append(crops, "soil", "wood"))
+	cropAssets, err := crop.LoadCropAssets("./resources/elements/Crops", append(crops, "soil", "wood", "egg", "milk"))
 	if err != nil {
 		return
 	}
 	defer strip.UnloadMapStripImg(cropAssets)
-	woodDropSfx := sfx.NewItemDrop(cropAssets["wood"].Img, 50)
+	itemDropList := []sfx.ItemDrop{
+		sfx.NewItemDrop(cropAssets["wood"].Img, "Wood", 50, true),
+	}
 
 	uiAssets := map[string]rl.Texture2D{
 		"selectbox_bl": rl.LoadTexture("./resources/UI/selectbox_bl.png"),
@@ -547,7 +573,10 @@ func main() {
 	defer rl.UnloadTexture(treeHunkImg)
 
 	supportedStyles := []string{"IDLE", "WALKING", "WATERING", "DIG", "AXE"}
-	humanAnimStyles := anim.NewAnimStyles("./resources/characters/Human", supportedStyles)
+	humanAnimStyles := anim.LoadCharacterAnimStyles("./resources/characters/Human", supportedStyles)
+	defer anim.UnloadAnimStylesMap(humanAnimStyles)
+	animalAnimStyles := anim.LoadAnimalAnimStyles("./resources/elements/Animals")
+	defer anim.UnloadAnimStylesMap(animalAnimStyles)
 
 	chimneySmoke := anim.LoadStripAnimation("./resources/elements/VFX/Chimney Smoke/chimneysmoke_03_strip30.png", 10)
 	defer rl.UnloadTexture(chimneySmoke.Image)
@@ -561,8 +590,6 @@ func main() {
 		idx := slices.Index(crops, cropName)
 		return cropTilesetStartId + idx
 	}
-
-	defer anim.UnloadAnimStyles(humanAnimStyles)
 
 	toolsUIAsset := LoadToolUIAsset()
 	defer UnloadTextureMap(toolsUIAsset)
@@ -584,6 +611,18 @@ func main() {
 		tools,
 		"shorthair",
 	)
+	animals := []entity.Animal{}
+	for _, a := range tm.Animals {
+		animals = append(animals,
+			entity.NewAnimal(
+				a.Pos,
+				tm.Tilesize,
+				tm.TileScale,
+				a.Name,
+				animalAnimStyles[a.Name],
+			),
+		)
+	}
 
 	depthRenderer := render.NewDepthRenderer(20)
 	for _, t := range tm.Objects {
@@ -612,6 +651,16 @@ func main() {
 			},
 		})
 
+	}
+	for i := range animals {
+		depthRenderer.Sprites = append(depthRenderer.Sprites, render.Sprite{
+			Draw: func(offset rl.Vector2, drawRoof bool) {
+				animals[i].Draw(offset)
+			},
+			Center: func() rl.Vector2 {
+				return animals[i].Center()
+			},
+		})
 	}
 
 	depthRenderer.Sprites = append(depthRenderer.Sprites, render.Sprite{
@@ -679,7 +728,6 @@ func main() {
 		} else if showShop {
 			if rl.IsKeyPressed(rl.KeySpace) {
 				showShop = false
-
 			} else {
 				if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
 					seedShopUI.Click(rl.GetMousePosition(), &playerInventory, &seedShop)
@@ -792,9 +840,11 @@ func main() {
 					// TODO add sfx for harvest
 
 				} else if _, ok := tm.Beds[chp]; ok {
+					// next day
 					day += 1
 					// start transition. block all inputs
 					transitionCounter = 512
+
 					// add plant age if soil is wet, reset soil to dry
 					for p, ft := range tm.FarmTiles {
 						if ft.IsWet {
@@ -803,8 +853,29 @@ func main() {
 						ft.IsWet = false
 						tm.FarmTiles[p] = ft
 					}
+					for _, a := range animals {
+						itemName := ""
+						if a.Species == "chicken" {
+							itemName = "Egg"
+						} else if a.Species == "cow" {
+							itemName = "Milk"
+						}
+						itemDrop := sfx.NewItemDrop(
+							cropAssets[strings.ToLower(itemName)].Img,
+							itemName,
+							0,
+							false,
+						)
+						itemDrop.Start(a.Center(), 0, rl.NewVector2(0, 0))
+						itemDropList = append(itemDropList, itemDrop)
+					}
 				} else if rl.CheckCollisionPointRec(hp, tm.SeedShop.Rect) {
 					showShop = true
+				} else if idx := sfx.CheckCollision(itemDropList, player.Hitbox(rl.NewVector2(0, 0)), float32(tm.TileScale)); idx != -1 {
+					drop := itemDropList[idx]
+					playerInventory.Increase(drop.Name, 1)
+					itemDropList = append(itemDropList[:idx], itemDropList[idx+1:]...)
+
 				}
 			}
 			if rl.IsKeyPressed(rl.KeyI) {
@@ -847,16 +918,24 @@ func main() {
 			t.Update(dt)
 			tm.Trees[i] = t
 			if prevState == "shaking" && t.State == "dead" {
-				woodDropSfx.Start(
+				itemDropList[0].Start(
 					rl.NewVector2(t.Pos.X+t.Size.X/2, t.Pos.Y+t.Size.Y/2),
 					7,
 					rl.Vector2Normalize(rl.NewVector2(rand.Float32()*2-1, rand.Float32()*2-1)),
 				)
 			}
 		}
-		woodDropSfx.Update(dt)
+		for i := range itemDropList {
+			itemDropList[i].Update(dt)
+		}
+
 		depthRenderer.Update()
 		tm.SeedShop.Update(dt)
+		for i := range animals {
+			animals[i].Update(dt, func(pos rl.Vector2) []rl.Rectangle {
+				return append(tm.GetObstaclesAround(pos), world.GetTileRectsAround(tm.AnimalObstacles, pos, float32(tm.Tilesize))...)
+			})
+		}
 		for i, s := range tm.ChimneySmokeList {
 			s.Update(dt)
 			tm.ChimneySmokeList[i] = s
@@ -926,7 +1005,9 @@ func main() {
 		if showShop {
 			seedShopUI.Draw(&seedShop, &playerInventory, uiAssets, float32(tm.TileScale))
 		}
-		woodDropSfx.Draw(camScroll, float32(tm.TileScale))
+		for i := range itemDropList {
+			itemDropList[i].Draw(camScroll, float32(tm.TileScale))
+		}
 		// draw inventory
 		if showInventory {
 			inventoryUI.Draw(&playerInventory, uiAssets, float32(tm.TileScale))

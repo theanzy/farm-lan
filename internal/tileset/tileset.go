@@ -16,6 +16,7 @@ type LayerObject struct {
 	Width  float32 `json:"width"`
 	X      float32 `json:"x"`
 	Y      float32 `json:"y"`
+	Name   string  `json:"name"`
 }
 
 type LayerData struct {

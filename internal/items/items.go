@@ -210,6 +210,22 @@ func LoadItems(assets map[string]strip.StripImg) []Item {
 			Description: "Used for building",
 			Image:       cropStrip(assets["wood"], 0),
 		},
+		{
+			Type:        "product",
+			BuyPrice:    12,
+			SellPrice:   20,
+			Name:        "Egg",
+			Description: "Chicken egg. Versetile food",
+			Image:       cropStrip(assets["egg"], 0),
+		},
+		{
+			Type:        "product",
+			BuyPrice:    12,
+			SellPrice:   20,
+			Name:        "Milk",
+			Description: "Fresh cow milk.",
+			Image:       cropStrip(assets["milk"], 0),
+		},
 	}
 	return items
 }

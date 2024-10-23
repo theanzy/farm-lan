@@ -26,6 +26,9 @@ func NewInventory(items []Item) Inventory {
 		if item.Name == "Wheat seed" {
 			q = 5
 		}
+		if item.Name == "Milk" {
+			q = 10
+		}
 		iItems = append(iItems, InventoryItem{Item: item, Quantity: q})
 	}
 	return Inventory{items: iItems}

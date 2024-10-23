@@ -44,12 +44,12 @@ func parseAnimConfig(filename string) (AnimConfig, error) {
 		return AnimConfig{}, err
 	}
 	return AnimConfig{
-		Parts:      parts[0:2],
+		Parts:      parts[0 : len(parts)-1],
 		StripCount: int(strip),
 	}, nil
 }
 
-func NewAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
+func LoadCharacterAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
 	styles := AnimStyles{}
 
 	entries, err := os.ReadDir(dirpath)
@@ -91,11 +91,34 @@ func NewAnimStyles(dirpath string, supportedStyles []string) AnimStyles {
 	return styles
 }
 
-func UnloadAnimStyles(s AnimStyles) {
+func UnloadAnimStylesMap(s AnimStyles) {
 	for _, style := range s {
 		rl.UnloadTexture(style.Base)
 		for _, variant := range style.Variants {
 			rl.UnloadTexture(variant)
 		}
 	}
+}
+
+func LoadAnimalAnimStyles(dirpath string) map[string]AnimStyle {
+	res := AnimStyles{}
+	files, err := os.ReadDir(dirpath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, f := range files {
+		style := AnimStyle{}
+		cfg, err := parseAnimConfig(f.Name())
+		if err != nil {
+			log.Fatal(err)
+		}
+		imgPath := path.Join(dirpath, f.Name())
+		img := rl.LoadTexture(imgPath)
+		style.StripCount = cfg.StripCount
+		style.Base = img
+		name := cfg.Parts[2]
+		res[name] = style
+	}
+	return res
 }
